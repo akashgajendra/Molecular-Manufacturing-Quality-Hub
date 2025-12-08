@@ -1,0 +1,10 @@
+# Core Computer Vision Library
+opencv-python # This is the primary dependency for image manipulation
+
+# High-Performance Computation
+numpy # OpenCV relies heavily on NumPy arrays
+
+# Infrastructure communication
+confluent-kafka
+boto3
+python-dotenv

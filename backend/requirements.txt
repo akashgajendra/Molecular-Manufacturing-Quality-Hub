@@ -1,8 +1,7 @@
-# Core Scientific Libraries
-pymzml==2.7.2 # Specific version for stability
-numpy
-
-# Kafka, S3/MinIO, and Environment Management
-confluent-kafka
-boto3
+fastapi
+pydantic
+uvicorn
 python-dotenv
+# Infrastructure communication (for MinIO/S3 and Kafka Producer)
+boto3
+confluent-kafka

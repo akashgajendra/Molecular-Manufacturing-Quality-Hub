@@ -1,0 +1,7 @@
+pymzml==2.7.2 # For reading Mass Spec files
+numpy # For fast array computation and peak searching
+
+# Infrastructure communication
+confluent-kafka
+boto3
+python-dotenv
