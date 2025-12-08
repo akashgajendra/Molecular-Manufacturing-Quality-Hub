@@ -5,3 +5,5 @@ python-dotenv
 # Infrastructure communication (for MinIO/S3 and Kafka Producer)
 boto3
 confluent-kafka
+sqlalchemy
+psycopg2-binary
