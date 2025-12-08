@@ -7,3 +7,9 @@ boto3
 confluent-kafka
 sqlalchemy
 psycopg2-binary
+# Authentication (for passlib and python-jose)
+passlib[bcrypt]
+python-jose
+# Infrastructure Clients
+minio
+confluent-kafka
