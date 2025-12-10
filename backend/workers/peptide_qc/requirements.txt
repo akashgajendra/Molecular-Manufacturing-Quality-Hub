@@ -1,7 +1,16 @@
-pymzml==2.7.2 # For reading Mass Spec files
-numpy # For fast array computation and peak searching
+# pymzml==2.7.2 # For reading Mass Spec files
+# numpy # For fast array computation and peak searching
 
-# Infrastructure communication
+# # Infrastructure communication
+# confluent-kafka
+# boto3
+# python-dotenv
+
 confluent-kafka
-boto3
+minio
+sqlalchemy
+psycopg2-binary
+pydantic
 python-dotenv
+pymzml
+numpy
