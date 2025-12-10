@@ -10,7 +10,7 @@ load_dotenv()
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/db")
 
-# 1. Database Engine and Session
+# --- 1. Database Engine and Session ---
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -24,7 +24,6 @@ class UserModel(Base):
     password_hash = Column(String, nullable=False)
     organization = Column(String)
 
-    # Relationship to Jobs
     jobs = relationship("JobModel", back_populates="submitter")
 
 # --- 3. Jobs Table (Workflow Status) ---
@@ -40,7 +39,6 @@ class JobModel(Base):
     submitted_at = Column(DateTime, default=func.now())
     completed_at = Column(DateTime, nullable=True)
 
-    # Relationships
     submitter = relationship("UserModel", back_populates="jobs")
     files = relationship("FileModel", uselist=False, back_populates="job")
     parameters = relationship("ParameterModel", uselist=False, back_populates="job")
@@ -58,7 +56,6 @@ class FileModel(Base):
     filename = Column(String, nullable=False)
     content_type = Column(String)
 
-    # Relationship
     job = relationship("JobModel", back_populates="files")
 
 # --- 5. Parameters Table (Job Input Configuration) ---
@@ -72,7 +69,6 @@ class ParameterModel(Base):
     # JSONB is highly flexible and indexed in PostgreSQL
     payload = Column(JSONB, nullable=False)
 
-    # Relationship
     job = relationship("JobModel", back_populates="parameters")
 
 # --- 6. Results Table (Worker Output) ---
@@ -86,7 +82,6 @@ class ResultModel(Base):
     # Stores the worker's Pydantic result model as JSON (e.g., scores, counts, etc.)
     output_data = Column(JSONB, nullable=False)
 
-    # Relationship
     job = relationship("JobModel", back_populates="results")
 
 # --- 7. Notifications Table (User Alerts) ---
@@ -102,7 +97,6 @@ class NotificationModel(Base):
     is_read = Column(BOOLEAN, default=False)
     created_at = Column(DateTime, default=func.now())
 
-    # Relationship
     job = relationship("JobModel", back_populates="notifications")
 
 # Function to create tables on startup (used in development)
