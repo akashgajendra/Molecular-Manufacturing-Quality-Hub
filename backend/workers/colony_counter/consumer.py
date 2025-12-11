@@ -79,7 +79,7 @@ def start_worker():
         logger.critical("MinIO client failed to initialize. Worker cannot proceed.")
         return
 
-    logger.info(f"Peptide QC Worker started, listening on topic: {KAFKA_TOPIC}")
+    logger.info(f"Colony Counter Worker started, listening on topic: {KAFKA_TOPIC}")
 
     while True:
         try:
@@ -111,23 +111,36 @@ def start_worker():
                 # 3. Download File from MinIO
                 # Note: The MinIO client needs the bucket name and object key
                 _, object_key = s3_uri.split(f"s3://{MINIO_BUCKET}/")
-                local_file_path = f"/tmp/{object_key.split('/')[-1]}"
+                file_extension = object_key.split('.')[-1]
+                input_file_path = f"/tmp/{job_id}_input.{file_extension}"
+                output_file_path = f"/tmp/{job_id}_output.{file_extension}"
                 
-                logger.info(f"Downloading {object_key} to {local_file_path}")
-                minio_client.fget_object(MINIO_BUCKET, object_key, local_file_path)
+                logger.info(f"Downloading {object_key} to {input_file_path}")
+                minio_client.fget_object(MINIO_BUCKET, object_key, input_file_path)
 
                 # 4. Run Analysis (CORE SCIENTIFIC LOGIC)
                 # This function is where the heavy work happens
-                result_model = run_colony_count(db_session, job_id, local_file_path, message_data)
+                result_model = run_colony_count(db_session, job_id, input_file_path, message_data, output_file_path)
+                marked_object_key = f"{message_data['user_id']}/{job_id}/marked_{object_key.split('/')[-1]}"
 
+                minio_client.fput_object(
+                    MINIO_BUCKET,
+                    marked_object_key,
+                    output_file_path,
+                    result_model,
+                    content_type="image/png"
+                )
+
+                result_model.image_s3_uri = f"s3://{MINIO_BUCKET}/{marked_object_key}"
                 # 5. Update DB Status (COMPLETED/FAILED)
                 # The result_model contains the final qc_status (PASS/FAIL)
                 update_job_result(db_session, job_id, result_model)
                 
                 # 6. Clean up
-                os.remove(local_file_path)
+                os.remove(input_file_path)
+                os.remove(output_file_path)
                 consumer.commit(msg)
-                logger.info(f"Job {job_id} COMPLETED with status: {result_model.qc_status}")
+                logger.info(f"Job {job_id} COMPLETED with status")
 
             except Exception as e:
                 logger.error(f"Job {job_id} FAILED during processing: {e}")
