@@ -2,8 +2,6 @@ import os
 import json
 import logging
 from confluent_kafka import Consumer, KafkaException
-from minio import Minio
-from minio.error import S3Error
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -22,12 +20,6 @@ load_dotenv()
 KAFKA_BROKER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = "topic-crispr-jobs"
 CONSUMER_GROUP = "crispr-genomics-workers"
-
-# MinIO Config
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
-MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
-MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "raw-data-bucket")
 
 # DB Config (Use the internal service name 'postgres')
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/quality_hub_db")
