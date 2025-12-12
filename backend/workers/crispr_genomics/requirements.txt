@@ -1,3 +1,5 @@
 confluent-kafka
 boto3
 python-dotenv
+psycopg2-binary
+pydantic
