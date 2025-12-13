@@ -1,12 +1,10 @@
-# --- STAGE 1: Build Environment ---
-FROM python:3.9-slim-buster AS builder
+# --- STAGE 1: Builder ---
+# Use a modern, supported Python version to fix apt-get 404s
+FROM python:3.11-slim AS builder
 
-# Set environment variables
-ENV PYTHONUNBUFFERED 1
-ENV APP_HOME /app
+ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies required for OpenCV build and running the application
-# build-essential, cmake, and various image libraries are critical for opencv
+# Install system dependencies required for OpenCV and building packages
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
@@ -20,19 +18,23 @@ RUN apt-get update && \
     libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR $APP_HOME
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy requirements and install
+WORKDIR /app
 COPY requirements.txt .
-RUN pip install --upgrade pip
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 
-# --- STAGE 2: Final Runtime Environment (Minimal) ---
-FROM python:3.9-slim-buster
+# --- STAGE 2: Runtime ---
+# CRITICAL: This must also match the supported version (NOT buster)
+FROM python:3.11-slim
 
-ENV APP_HOME /app
-WORKDIR $APP_HOME
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Install only the necessary OpenCV runtime libraries
 RUN apt-get update && \
@@ -43,11 +45,12 @@ RUN apt-get update && \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy built dependencies and install from wheels
-COPY --from=builder /usr/src/app/wheels /wheels
-RUN pip install --no-cache /wheels/*
+# Copy the virtual environment from the builder stage
+COPY --from=builder /opt/venv /opt/venv
 
-# Copy the worker application code
-COPY consumer.py .
+WORKDIR /app
+# Copy the application code
+COPY . .
 
-# Command is already defined in docker-compose.yml
+# Run the consumer
+CMD ["python", "consumer.py"]

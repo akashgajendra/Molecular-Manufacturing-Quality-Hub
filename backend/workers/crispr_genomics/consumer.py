@@ -13,7 +13,7 @@ from backend.utils.db_utils import update_job_status, update_job_result
 # or include them in the worker's Docker build context.
 
 # For simplicity, we define placeholders for the required imports from the API:
-from crispr_genomics import run_crispr_analysis # Placeholder for the core analysis function
+from crispr_genomics import run_crispr_genomics # Placeholder for the core analysis function
 
 # --- Configuration ---
 load_dotenv()

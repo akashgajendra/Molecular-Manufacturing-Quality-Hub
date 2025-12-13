@@ -7,6 +7,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: postgres_db
     restart: always
     env_file:
       - .env
@@ -17,19 +18,20 @@ services:
 
   minio:
     image: minio/minio
+    container_name: minio_storage
     restart: always
     ports:
       - "9000:9000"
       - "9001:9001" # MinIO Console Port
     env_file:
       - .env
-    # Start MinIO server and specify the console port
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
     ports:
       - "2181:2181"
     environment:
@@ -38,6 +40,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka_broker
     depends_on:
       - zookeeper
     ports:
@@ -45,6 +48,7 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # IMPORTANT: Ensure Kafka listeners use the internal network name 'kafka' for brokers
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
@@ -59,6 +63,7 @@ services:
   api:
     build:
       context: ./backend/api
+    container_name: api_gateway
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     volumes:
       - ./backend/api:/app
@@ -74,40 +79,54 @@ services:
   peptide_qc_worker:
     build:
       context: ./backend/workers/peptide_qc
+    container_name: peptide_qc_worker
     command: python consumer.py 
     volumes:
       - ./backend/workers/peptide_qc:/app
-      - ./data/peptide_qc_data:/data/raw # Volume for mounting test files
+      - ./data/peptide_qc_data:/data/raw
     depends_on:
       - kafka
       - minio
+      - postgres # Workers need DB access to save results
     env_file:
       - .env
 
   colony_counter_worker:
     build:
       context: ./backend/workers/colony_counter
+    container_name: colony_counter_worker
     command: python consumer.py
     volumes:
       - ./backend/workers/colony_counter:/app
-      - ./data/colony_counter_data:/data/raw # Volume for mounting test files
+      - ./data/colony_counter_data:/data/raw
     depends_on:
       - kafka
       - minio
+      - postgres # Workers need DB access to save results
     env_file:
       - .env
 
+  # --- FINALIZED CRISPR GENOMICS WORKER ---
   crispr_genomics_worker:
+    # NOTE: The Bowtie2 installation and genome download is handled by the Dockerfile 
+    #       inside this build context.
     build:
-      context: ./backend/workers/crispr_genomics
-    command: python consumer.py
+      # Context must be the worker's folder to find its specific Dockerfile and requirements.txt
+      context: ./backend/workers/crispr_genomics 
+    container_name: crispr_genomics_worker
+    # command: python consumer.py
     volumes:
-      - ./backend/workers/crispr_genomics:/app
+      # Mount the worker code for live development
+      - ./backend/workers/crispr_genomics:/app 
+      # Mount the entire project root volume as /data if Bowtie2 needs access to a large volume later.
+      # However, for the current setup, the genome index is downloaded inside the image.
     depends_on:
       - kafka
-      - minio
+      - postgres # CRITICAL: Needs DB access to save the final QC result
     env_file:
       - .env
+    # We remove 'minio' dependency as the core Bowtie2 analysis doesn't need file storage
+    # If the job input (gRNA) were a huge file, it would be needed.
 
 volumes:
   postgres_data:

@@ -1,11 +1,11 @@
-# --- STAGE 1: Build Environment ---
-FROM python:3.9-slim-buster AS builder
+# --- STAGE 1: Builder ---
+# Use a modern, supported Python version (Debian Bookworm based) to fix apt-get 404s
+FROM python:3.11-slim AS builder
 
 # Set environment variables
-ENV PYTHONUNBUFFERED 1
-ENV APP_HOME /app
+ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies required for building scientific Python packages
+# Install system dependencies required for building Python packages (like lxml)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc \
@@ -15,33 +15,39 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory and copy requirements
-WORKDIR $APP_HOME
+# Create a virtual environment
+RUN python -m venv /opt/venv
+# Make sure we use the virtualenv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
 COPY requirements.txt .
 
-# Install packages into a wheelhouse (for efficient transfer)
-RUN pip install --upgrade pip
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
+# Install Python dependencies into the virtualenv
+RUN pip install --no-cache-dir -r requirements.txt
 
 
-# --- STAGE 2: Final Runtime Environment ---
-FROM python:3.9-slim-buster
+# --- STAGE 2: Runtime ---
+# CRITICAL: This must also match the supported version (NOT buster)
+FROM python:3.11-slim
 
-# Install only the necessary runtime system dependencies
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install only the necessary runtime system libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libxml2 \
     libxslt1.1 \
     && rm -rf /var/lib/apt/lists/*
 
-ENV APP_HOME /app
-WORKDIR $APP_HOME
+# Copy the virtual environment from the builder stage
+COPY --from=builder /opt/venv /opt/venv
 
-# Copy built dependencies and install from wheels
-COPY --from=builder /usr/src/app/wheels /wheels
-RUN pip install --no-cache /wheels/*
+WORKDIR /app
+# Copy the application code
+COPY . .
 
-# Copy the worker application code
-COPY consumer.py .
-
-# Command is already defined in docker-compose.yml
+# Run the consumer
+CMD ["python", "consumer.py"]

@@ -14,14 +14,45 @@ RUN apt-get update && \
 
 # === Download and Index the Genome (The Data) ===
 # This small genome index is used for fast, reproducible testing
-WORKDIR /genomes
-RUN wget https://genome-idx.s3.amazonaws.com/bt/Saccharomyces_cerevisiae.zip && \
-    unzip Saccharomyces_cerevisiae.zip && \
-    rm Saccharomyces_cerevisiae.zip
+# WORKDIR /genomes
+# RUN wget https://genome-idx.s3.amazonaws.com/bt/sacCer3.zip && \
+#     unzip sacCer3.zip && \
+#     rm sacCer3.zip
 
 # RUN wget https://genome-idx.s3.amazonaws.com/bt/GRCh38_no_alt_analysis_set.zip && \
 #     unzip GRCh38_no_alt_analysis_set.zip && \
 #     rm GRCh38_no_alt_analysis_set.zip
+
+# === Download and Index the Genome (The Data) ===
+# CRITICAL FIX: Replaced the broken S3 link with a stable UCSC source and self-building index.
+# WORKDIR /genomes
+# Download the stable S. cerevisiae reference genome FASTA (sacCer3 assembly)
+# RUN wget http://hgdownload.cse.ucsc.edu/goldenPath/sacCer3/bigZips/chromFa.tar.gz && \
+#     tar -xvzf chromFa.tar.gz && \
+#     rm chromFa.tar.gz && \
+#     cat chr*.fa > sacCer3.fa && \
+#     rm chr*.fa
+
+# Build the Bowtie2 index from the FASTA file
+# This ensures index compatibility with the installed bowtie2 version
+# RUN bowtie2-build sacCer3.fa sacCer3
+
+
+WORKDIR /genomes
+# 1. Download the raw FASTA file
+RUN wget http://hgdownload.cse.ucsc.edu/goldenPath/sacCer3/bigZips/chromFa.tar.gz && \
+    tar -xvzf chromFa.tar.gz && \
+    rm chromFa.tar.gz && \
+    cat chr*.fa > sacCer3.fa && \
+    rm chr*.fa
+
+# 2. **CRITICAL STEP:** Use the installed Bowtie2 utility to create the index files
+RUN bowtie2-build sacCer3.fa sacCer3
+
+# The old, broken lines are now removed or commented out:
+# RUN wget https://genome-idx.s3.amazonaws.com/bt/sacCer3.zip && \
+#     unzip sacCer3.zip && \
+#     rm sacCer3.zip
 
 # === Python Environment Setup ===
 WORKDIR /app
