@@ -55,6 +55,9 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"      
+      KAFKA_CREATE_TOPICS: "topic-peptide-jobs:1:1,topic-colony-jobs:1:1,topic-crispr-jobs:1:1"
+      # ---------------------
 
   # -------------------------------------
   # 2. APPLICATION SERVICES
