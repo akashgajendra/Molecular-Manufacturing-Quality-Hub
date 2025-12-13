@@ -49,16 +49,28 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       # IMPORTANT: Ensure Kafka listeners use the internal network name 'kafka' for brokers
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"      
-      KAFKA_CREATE_TOPICS: "topic-peptide-jobs:1:1,topic-colony-jobs:1:1,topic-crispr-jobs:1:1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"      
       # ---------------------
 
+  kafka_init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka_init
+    depends_on:
+      - kafka
+    volumes:
+      # Mount the script into the container
+      - ./create_topics.sh:/tmp/create_topics.sh
+    command: ["/bin/bash", "/tmp/create_topics.sh"]
+    environment:
+      # Use the internal listener for the script connection
+      KAFKA_BROKER_LISTENER: kafka_broker:29092
   # -------------------------------------
   # 2. APPLICATION SERVICES
   # -------------------------------------
