@@ -105,7 +105,7 @@ def start_worker():
                 update_job_status(db_session, job_id, "PROCESSING")
 
                 # 3. Run Analysis (CORE SCIENTIFIC LOGIC)
-                result_model = run_crispr_genomics(db_session, job_id, gRNA_sequence, genome_id) 
+                result_model = run_crispr_genomics(job_id, gRNA_sequence, genome_id) 
 
                 # 4. Update DB Status (COMPLETED/FAILED)
                 update_job_result(db_session, job_id, result_model)
@@ -121,7 +121,7 @@ def start_worker():
                 
                 # Best Effort: Try to update DB if job_id was successfully extracted
                 if db_session and job_id:
-                    update_job_status(db_session, job_id, "FAILED", error_message=error_message)
+                    update_job_status(db_session, job_id, "FAILED")
 
                 # CRITICAL: Commit the offset to move past the bad message and stop the restart loop
                 consumer.commit(msg) 
@@ -132,7 +132,7 @@ def start_worker():
                 logger.error(f"Job {job_id} FAILED during processing: {e}")
                 
                 if db_session and job_id:
-                    update_job_status(db_session, job_id, "FAILED", error_message=error_message)
+                    update_job_status(db_session, job_id, "FAILED")
                 
                 consumer.commit(msg) # Commit message to avoid reprocessing infinite failures
 

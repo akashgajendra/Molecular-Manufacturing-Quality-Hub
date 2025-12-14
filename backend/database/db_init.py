@@ -108,6 +108,7 @@ def create_tables():
     """Creates all defined tables in the connected database."""
     Base.metadata.create_all(bind=engine)
 
+
 # Dependency to get a new database session for each request
 def get_db():
     db = SessionLocal()
@@ -115,8 +116,74 @@ def get_db():
         yield db
     finally:
         db.close()
-        
+
+# New function to insert default user and job records for testing
+def create_default_records(db_session):
+    """Inserts a default user and job record if they don't already exist."""
+    # --- 1. Insert Default User (ID 1) ---
+    default_user_id = 1
+    
+    # Check if the user already exists to prevent duplicate insertion errors
+    existing_user = db_session.query(UserModel).filter(UserModel.id == default_user_id).first()
+    
+    if not existing_user:
+        default_user = UserModel(
+            id=default_user_id,
+            username="test_user",
+            # Hashing passwords is done in the API, using a placeholder hash here
+            password_hash="dev_test_hash", 
+            organization="DevTeam"
+        )
+        db_session.add(default_user)
+        print(f"-> Inserted default user (ID: {default_user_id}).")
+    else:
+        print(f"-> Default user (ID: {default_user_id}) already exists.")
+
+    # --- 2. Insert Default Job (ID '1') for CRISPR Worker Test ---
+    default_job_id = '1'
+    
+    # Check if the job already exists
+    existing_job = db_session.query(JobModel).filter(JobModel.job_id == default_job_id).first()
+    
+    if not existing_job:
+        default_job = JobModel(
+            job_id=default_job_id,
+            user_id=default_user_id, # Links to the user above
+            service_type="crispr_genomics",
+            status="PENDING" # Ready for the worker to find
+        )
+        db_session.add(default_job)
+        print(f"-> Inserted default job (ID: {default_job_id}) for testing.")
+    else:
+        print(f"-> Default job (ID: {default_job_id}) already exists.")
+
+    db_session.commit()
+
+
+# Function to create tables on startup (used in development)
+def create_tables():
+    """Creates all defined tables in the connected database."""
+    Base.metadata.create_all(bind=engine)
+
+
+# --- MAIN EXECUTION BLOCK ---
 if __name__ == "__main__":
     print("Initializing database schema...")
+    
+    # 1. Create all tables
     create_tables()
     print("Database tables created successfully!")
+    
+    # 2. Insert default records using a new session
+    db = SessionLocal()
+    try:
+        print("Inserting default records for testing...")
+        create_default_records(db)
+        print("Default records insertion complete.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error during default record insertion: {e}")
+    finally:
+        db.close()
+        
+    print("Database initialization process finished.")

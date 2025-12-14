@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, Column, String, DateTime, Integer, ForeignKey, func
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 import datetime
 
@@ -9,6 +9,15 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    organization = Column(String)
+    jobs = relationship("JobModel", back_populates="submitter")
+
 class JobModel(Base):
     __tablename__ = "jobs"
     job_id = Column(String, primary_key=True, index=True)
@@ -17,12 +26,14 @@ class JobModel(Base):
     status = Column(String, default="PENDING", nullable=False)
     submitted_at = Column(DateTime, default=func.now())
     completed_at = Column(DateTime, nullable=True)
+    submitter = relationship("UserModel", back_populates="jobs")
 
 class ResultModel(Base):
     __tablename__ = "results"
     job_id = Column(String, ForeignKey("jobs.job_id"), primary_key=True)
     qc_status = Column(String, nullable=True)
     output_data = Column(JSONB, nullable=False)
+
 
 def update_job_status(db: Session, job_id: str, status: str):
     job = db.query(JobModel).filter(JobModel.job_id == job_id).first()
