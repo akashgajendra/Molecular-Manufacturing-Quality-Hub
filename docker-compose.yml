@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # -------------------------------------
   # 1. INFRASTRUCTURE SERVICES
@@ -40,7 +38,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
-    container_name: kafka_broker
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
@@ -49,7 +47,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       # IMPORTANT: Ensure Kafka listeners use the internal network name 'kafka' for brokers
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
@@ -58,6 +56,11 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"      
       # ---------------------
+    healthcheck:
+      test: ["CMD", "bash", "-c", "kafka-topics --bootstrap-server kafka:29092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   kafka_init:
     image: confluentinc/cp-kafka:7.6.0
@@ -70,7 +73,7 @@ services:
     command: ["/bin/bash", "/tmp/create_topics.sh"]
     environment:
       # Use the internal listener for the script connection
-      KAFKA_BROKER_LISTENER: kafka_broker:29092
+      KAFKA_BROKER_LISTENER: kafka:29092
   # -------------------------------------
   # 2. APPLICATION SERVICES
   # -------------------------------------
@@ -100,11 +103,16 @@ services:
       - ./backend/workers/peptide_qc:/app
       - ./data/peptide_qc_data:/data/raw
     depends_on:
-      - kafka
-      - minio
-      - postgres # Workers need DB access to save results
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      postgres:
+        condition: service_started
     env_file:
       - .env
+    restart: on-failure
+    
 
   colony_counter_worker:
     build:
@@ -115,11 +123,15 @@ services:
       - ./backend/workers/colony_counter:/app
       - ./data/colony_counter_data:/data/raw
     depends_on:
-      - kafka
-      - minio
-      - postgres # Workers need DB access to save results
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      postgres:
+        condition: service_started
     env_file:
       - .env
+    restart: on-failure
 
   # --- FINALIZED CRISPR GENOMICS WORKER ---
   crispr_genomics_worker:
@@ -136,12 +148,15 @@ services:
       # Mount the entire project root volume as /data if Bowtie2 needs access to a large volume later.
       # However, for the current setup, the genome index is downloaded inside the image.
     depends_on:
-      - kafka
-      - postgres # CRITICAL: Needs DB access to save the final QC result
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_started
     env_file:
       - .env
     # We remove 'minio' dependency as the core Bowtie2 analysis doesn't need file storage
     # If the job input (gRNA) were a huge file, it would be needed.
+    restart: on-failure
 
 volumes:
   postgres_data:

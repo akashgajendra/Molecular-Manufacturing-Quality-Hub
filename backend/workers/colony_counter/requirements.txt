@@ -8,3 +8,6 @@ numpy # OpenCV relies heavily on NumPy arrays
 confluent-kafka
 boto3
 python-dotenv
+minio
+sqlalchemy
+psycopg2-binary

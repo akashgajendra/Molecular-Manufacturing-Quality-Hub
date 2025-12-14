@@ -1,4 +1,4 @@
-from sqlAchemy.orm import Session
+from sqlalchemy.orm import Session
 from backend.api.database import JobModel, ResultModel
 import datetime
 

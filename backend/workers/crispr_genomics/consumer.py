@@ -5,7 +5,7 @@ from confluent_kafka import Consumer, KafkaException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
-from backend.utils.db_utils import update_job_status, update_job_result
+from db_utils import update_job_status, update_job_result
 
 # --- Internal Module Imports (We'll assume you copy over the models/db files) ---
 # NOTE: In a real microservice setup, these modules would be packaged or shared.
@@ -13,7 +13,7 @@ from backend.utils.db_utils import update_job_status, update_job_result
 # or include them in the worker's Docker build context.
 
 # For simplicity, we define placeholders for the required imports from the API:
-from crispr_genomics import run_crispr_genomics # Placeholder for the core analysis function
+from crispr_analysis import run_crispr_genomics # Placeholder for the core analysis function
 
 # --- Configuration ---
 load_dotenv()
