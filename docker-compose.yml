@@ -21,17 +21,25 @@ services:
       - .env
 
   minio:
-    image: minio/minio
-    container_name: minio_storage
-    restart: always
-    ports:
-      - "9000:9000"
-      - "9001:9001" # MinIO Console Port
-    env_file:
-      - .env
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
+      image: minio/minio
+      container_name: minio_storage
+      restart: always
+      ports:
+        - "9000:9000"
+        - "9001:9001" # MinIO Console Port
+      env_file:
+        - .env
+      volumes:
+        - minio_data:/data
+      
+      entrypoint: >
+        /bin/sh -c "
+        /usr/bin/minio server /data --console-address ':9001' &
+        sleep 5;
+        /usr/bin/mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD;
+        /usr/bin/mc mb local/quality-hub-dev;
+        wait
+        "
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -144,7 +152,6 @@ services:
       - .env
     restart: on-failure
     
-
   colony_counter_worker:
     build:
       context: ./backend/workers/colony_counter
