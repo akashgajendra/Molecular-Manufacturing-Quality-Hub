@@ -1,8 +1,4 @@
 services:
-  # -------------------------------------
-  # 1. INFRASTRUCTURE SERVICES
-  # -------------------------------------
-
   postgres:
     image: postgres:16-alpine
     container_name: postgres_db
@@ -13,6 +9,16 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+  
+  db_init:
+    build:
+      context: ./backend/database 
+    container_name: db_init
+    depends_on:
+      postgres:
+        condition: service_started
+    env_file:
+      - .env
 
   minio:
     image: minio/minio
@@ -106,9 +112,14 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - kafka
-      - minio
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      postgres:
+        condition: service_started
+      db_init:
+        condition: service_completed_successfully
     env_file:
       - .env
 
@@ -127,6 +138,8 @@ services:
         condition: service_started
       postgres:
         condition: service_started
+      db_init:
+        condition: service_completed_successfully
     env_file:
       - .env
     restart: on-failure
@@ -147,6 +160,8 @@ services:
         condition: service_started
       postgres:
         condition: service_started
+      db_init:
+        condition: service_completed_successfully
     env_file:
       - .env
     restart: on-failure
@@ -170,6 +185,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_started
+      db_init:
+        condition: service_completed_successfully
     env_file:
       - .env
     # We remove 'minio' dependency as the core Bowtie2 analysis doesn't need file storage

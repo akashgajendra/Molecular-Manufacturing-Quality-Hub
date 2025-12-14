@@ -1,0 +1,4 @@
+# db_init_requirements.txt
+SQLAlchemy
+psycopg2-binary
+python-dotenv
