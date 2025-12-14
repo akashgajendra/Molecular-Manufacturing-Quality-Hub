@@ -16,3 +16,4 @@ docker exec -it kafka kafka-console-producer \
 docker compose logs crispr_genomics_worker
 docker exec -it postgres_db psql -U user quality_hub_db
 \dt
+{"job_id": "2","user_id": 1,"s3_uri": "s3://quality-hub-dev/test/peptide_qc/Standard_peptide_mixture_collected_using_SLIM_Orbitrap.mzML"}

@@ -47,8 +47,8 @@ def update_job_result(db: Session, job_id: str, result_model):
         job.completed_at = datetime.datetime.now()
         result = ResultModel(
             job_id=job_id,
-            qc_status = result_model.qc_status,
-            output_data=result_model.model_dump()
+            qc_status = result_model["qc_status"],
+            output_data=result_model
         )
         db.add(result)
         db.commit()

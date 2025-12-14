@@ -49,7 +49,7 @@ def update_job_result(db: Session, job_id: str, result_model):
         result = ResultModel(
             job_id=job_id,
             qc_status = result_model.qc_status,
-            output_data=result_model.model_dump()
+            output_data=result_model()
         )
         db.add(result)
         db.commit()

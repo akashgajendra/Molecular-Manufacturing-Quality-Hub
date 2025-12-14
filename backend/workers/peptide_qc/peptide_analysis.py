@@ -3,19 +3,21 @@ import pymzml
 import numpy as np
 import os
 from Bio.SeqUtils import molecular_weight
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('peptide-worker')
 
-# Placeholder for DB model import (Adjust this based on your actual model structure)
-class PeptideResultModel:
-    def __init__(self, job_id, sequence, found, abundance, qc_status):
-        self.job_id = job_id
-        self.sequence = sequence
-        self.found_in_sample = found
-        self.relative_abundance_pct = abundance
-        self.qc_status = qc_status
-
-PPM_TOLERANCE = 5.0  # Tolerance for grouping and matching peaks
+PPM_TOLERANCE = 40.0  # Tolerance for grouping and matching peaks
 MIN_INTENSITY_THRESHOLD = 5000.0 # Filter out very low noise peaks
 PROTON_MASS = 1.007276
+DEFAULT_SEQUENCE = "DRVYIHPF"
+
+VALID_AA = set("ACDEFGHIKLMNPQRSTVWY")
+
+def validate_peptide_sequence(seq: str):
+    invalid = set(seq) - VALID_AA
+    if invalid:
+        raise ValueError(f"Invalid amino acids in peptide sequence: {invalid}")
 
 # --- CORE SCIENTIFIC LOGIC FUNCTIONS ---
 def calculate_theoretical_mz(sequence, charge: int) -> float:
@@ -87,19 +89,20 @@ def find_target_peptide(all_features: list, theoretical_mz: float, ppm_tolerance
 
 # --- MAIN INTEGRATION FUNCTION ---
 
-def run_peptide_qc(db_session, job_id: int, local_file_path: str, message_data: dict) -> PeptideResultModel:
+def run_peptide_qc(job_id: int, local_file_path: str, message_data: dict) -> dict:
     """
     Executes the full peptide QC workflow.
     
     Returns:
-        PeptideResultModel: An object representing the final analysis result for DB storage.
+        dict: A dictionary representing the final analysis result for DB storage.
     """
-    target_sequence = message_data.get("target_sequence", "DEFAULT_SEQUENCE") 
+    target_sequence = message_data.get("target_sequence", DEFAULT_SEQUENCE) 
     target_charge = message_data.get("target_charge", 2) # Assume 2+ charge by default
 
     logger.info(f"[{job_id}] Analyzing target: {target_sequence} @ {target_charge}+")
 
     # 1. Calculate Theoretical m/z
+    validate_peptide_sequence(target_sequence)
     theoretical_mz = calculate_theoretical_mz(target_sequence, target_charge)
     
     # 2. Extract All Features
@@ -118,18 +121,18 @@ def run_peptide_qc(db_session, job_id: int, local_file_path: str, message_data: 
         relative_abundance = (target_result["intensity"] / total_intensity) * 100
         qc_status = "PASS" if relative_abundance > 0.05 else "FAIL" # Example QC threshold
         
-        return PeptideResultModel(
-            job_id=job_id,
-            sequence=target_sequence,
-            found=True,
-            abundance=round(relative_abundance, 3),
-            qc_status=qc_status
-        )
+        return {
+            "job_id": job_id,
+            "sequence": target_sequence,
+            "found_in_sample": target_result["found"],
+            "relative_abundance_pct": round(relative_abundance, 3),
+            "qc_status": qc_status
+        }
     else:
-        return PeptideResultModel(
-            job_id=job_id,
-            sequence=target_sequence,
-            found=False,
-            abundance=0.0,
-            qc_status="FAIL"
-        )
+        return {
+            "job_id": job_id,
+            "sequence": target_sequence,
+            "found_in_sample": False,
+            "relative_abundance_pct": 0.0,
+            "qc_status": "FAIL"
+        }

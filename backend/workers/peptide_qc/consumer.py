@@ -27,7 +27,7 @@ CONSUMER_GROUP = "peptide-qc-workers"
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
-MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "raw-data-bucket")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "quality-hub-dev")
 
 # DB Config (Use the internal service name 'postgres')
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/quality_hub_db")
@@ -118,7 +118,7 @@ def start_worker():
 
                 # 4. Run Analysis (CORE SCIENTIFIC LOGIC)
                 # This function is where the heavy work happens
-                result_model = run_peptide_qc(db_session, job_id, local_file_path, message_data)
+                result_model = run_peptide_qc(job_id, local_file_path, message_data)
 
                 # 5. Update DB Status (COMPLETED/FAILED)
                 # The result_model contains the final qc_status (PASS/FAIL)
@@ -127,11 +127,11 @@ def start_worker():
                 # 6. Clean up
                 os.remove(local_file_path)
                 consumer.commit(msg)
-                logger.info(f"Job {job_id} COMPLETED with status: {result_model.qc_status}")
+                logger.info(f"Job {job_id} COMPLETED with status: {result_model['qc_status']}")
 
             except Exception as e:
                 logger.error(f"Job {job_id} FAILED during processing: {e}")
-                update_job_status(db_session, job_id, "FAILED", error_message=str(e))
+                update_job_status(db_session, job_id, "FAILED")
                 consumer.commit(msg) # Commit message to avoid reprocessing infinite failures
 
             finally:

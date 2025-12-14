@@ -118,19 +118,17 @@ def get_db():
         db.close()
 
 # New function to insert default user and job records for testing
+# Function to create tables on startup (used in development)
 def create_default_records(db_session):
-    """Inserts a default user and job record if they don't already exist."""
-    # --- 1. Insert Default User (ID 1) ---
+    """Inserts a default user and test jobs if they don't already exist."""
     default_user_id = 1
     
-    # Check if the user already exists to prevent duplicate insertion errors
+    # --- 1. Insert Default User (ID 1) ---
     existing_user = db_session.query(UserModel).filter(UserModel.id == default_user_id).first()
-    
     if not existing_user:
         default_user = UserModel(
             id=default_user_id,
             username="test_user",
-            # Hashing passwords is done in the API, using a placeholder hash here
             password_hash="dev_test_hash", 
             organization="DevTeam"
         )
@@ -140,31 +138,65 @@ def create_default_records(db_session):
         print(f"-> Default user (ID: {default_user_id}) already exists.")
 
     # --- 2. Insert Default Job (ID '1') for CRISPR Worker Test ---
-    default_job_id = '1'
+    default_job_id_crispr = '1'
+    existing_job_crispr = db_session.query(JobModel).filter(JobModel.job_id == default_job_id_crispr).first()
     
-    # Check if the job already exists
-    existing_job = db_session.query(JobModel).filter(JobModel.job_id == default_job_id).first()
-    
-    if not existing_job:
-        default_job = JobModel(
-            job_id=default_job_id,
-            user_id=default_user_id, # Links to the user above
+    if not existing_job_crispr:
+        default_job_crispr = JobModel(
+            job_id=default_job_id_crispr,
+            user_id=default_user_id,
             service_type="crispr_genomics",
-            status="PENDING" # Ready for the worker to find
+            status="PENDING" 
         )
-        db_session.add(default_job)
-        print(f"-> Inserted default job (ID: {default_job_id}) for testing.")
+        db_session.add(default_job_crispr)
+        print(f"-> Inserted default job (ID: {default_job_id_crispr}) for CRISPR testing.")
     else:
-        print(f"-> Default job (ID: {default_job_id}) already exists.")
+        print(f"-> Default job (ID: {default_job_id_crispr}) already exists.")
+
+    # --- 3. Insert Default Job (ID '2') for Peptide QC Worker Test ---
+    default_job_id_peptide = '2'
+    
+    existing_job_peptide = db_session.query(JobModel).filter(JobModel.job_id == default_job_id_peptide).first()
+    
+    if not existing_job_peptide:
+        # A. Create the Job Record
+        default_job_peptide = JobModel(
+            job_id=default_job_id_peptide,
+            user_id=default_user_id,
+            service_type="peptide_qc",
+            status="PENDING"
+        )
+        db_session.add(default_job_peptide)
+
+        # B. Create the File Record (simulating the upload step)
+        default_file = FileModel(
+            job_id=default_job_id_peptide,
+            s3_uri="s3://quality-hub-dev/test-data/peptide_qc/input_peptide.fasta",
+            filename="input_peptide.fasta",
+            content_type="application/octet-stream"
+        )
+        db_session.add(default_file)
+
+        # C. Create the Parameter Record (simulating the JSON payload)
+        default_params = ParameterModel(
+            job_id=default_job_id_peptide,
+            payload={
+                "min_purity_percent": 95.0,
+                "target_peptide": "AVLFGWTRN"
+            }
+        )
+        db_session.add(default_params)
+        
+        print(f"-> Inserted default job (ID: {default_job_id_peptide}), File, and Parameters for Peptide QC testing.")
+    else:
+        print(f"-> Default job (ID: {default_job_id_peptide}) already exists.")
 
     db_session.commit()
-
 
 # Function to create tables on startup (used in development)
 def create_tables():
     """Creates all defined tables in the connected database."""
     Base.metadata.create_all(bind=engine)
-
 
 # --- MAIN EXECUTION BLOCK ---
 if __name__ == "__main__":
