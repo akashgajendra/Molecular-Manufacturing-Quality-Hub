@@ -69,13 +69,16 @@ def start_worker():
                     logger.error(f"Fatal Kafka error: {msg.error()}")
                     break
                 continue
-
+            if msg.value() is None:
+                logger.warning(f"Received message with None value. Skipping offset: {msg.offset()}")
+                consumer.commit(msg) # Commit the offset to move past the empty message
+                continue
             # 1. Parse Message
             message_data = json.loads(msg.value().decode('utf-8'))
             job_id = message_data['job_id']
-            gRNA_sequence = message_data['parameters']['guide_rna_sequence']
-            genome_id = message_data['parameters']['genome_id']
-            
+            gRNA_sequence = message_data['gRNA_sequence']
+            genome_id = message_data.get('genome_id', 'sacCer3')
+
             db_session = init_db_session()
             if not db_session: 
                 logger.error("Database session initialization failed. Skipping job processing.")

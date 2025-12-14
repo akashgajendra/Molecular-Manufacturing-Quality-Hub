@@ -16,8 +16,7 @@ class CRISPRJobResult:
     def model_dump(self): return self.__dict__
 
 # --- Constants ---
-GENOME_INDEX_BASE = "/genomes/Saccharomyces_cerevisiae/sacCer3.1"
-
+BOWTIE2_INDEX_PATH = "/genomes/sacCer3"
 
 # --- Core Alignment Execution ---
 def run_alignment_tool(gRNA_sequence: str) -> int:
@@ -33,7 +32,7 @@ def run_alignment_tool(gRNA_sequence: str) -> int:
     try:
         command = [
             "bowtie2", "-f", "-a", "-N", "1",
-            "-x", GENOME_INDEX_BASE, 
+            "-x", BOWTIE2_INDEX_PATH, 
             "-U", query_filename
         ]
         
