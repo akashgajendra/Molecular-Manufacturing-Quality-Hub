@@ -7,3 +7,8 @@ docker-compose logs kafka
 docker-compose logs -f crispr_genomics_worker
 docker-compose logs -f kafka
 docker-compose logs -f colony_counter_worker
+docker exec -it kafka kafka-console-producer \
+  --broker-list kafka:29092 \
+  --topic topic-crispr-jobs
+{"job_id": 1001, "user_id": "user_test", "grna_sequence": "GCCTATTCTGACTGACTGACT"}
+docker compose logs crispr_genomics_worker
