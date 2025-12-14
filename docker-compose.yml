@@ -74,6 +74,24 @@ services:
     environment:
       # Use the internal listener for the script connection
       KAFKA_BROKER_LISTENER: kafka:29092
+
+  kafka_ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka_ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy # Wait for Kafka to be healthy (and topics created)
+    environment:
+      # KAFKA_CLUSTERS_0_NAME: The name displayed in the UI
+      KAFKA_CLUSTERS_0_NAME: 'Molecular-Manufacturing-Hub'
+      # KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: Must use the internal service name and the internal listener port (29092)
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka:29092' 
+      # KAFKA_CLUSTERS_0_ZOOKEEPER: The internal service name and port of your Zookeeper
+      KAFKA_CLUSTERS_0_ZOOKEEPER: 'zookeeper:2181'
+      # Set to 'true' to allow creating/deleting topics and viewing messages
+      KAFKA_CLUSTERS_0_AUDIT_TOPIC_ENABLED: true
   # -------------------------------------
   # 2. APPLICATION SERVICES
   # -------------------------------------
