@@ -1,9 +1,4 @@
 # Core Computer Vision Library
-opencv-python # This is the primary dependency for image manipulation
-
-# High-Performance Computation
-numpy # OpenCV relies heavily on NumPy arrays
-
 # Infrastructure communication
 confluent-kafka
 boto3
@@ -11,3 +6,7 @@ python-dotenv
 minio
 sqlalchemy
 psycopg2-binary
+# Computer Vision and Analysis
+ultralytics # For YOLOv8
+opencv-python
+numpy              

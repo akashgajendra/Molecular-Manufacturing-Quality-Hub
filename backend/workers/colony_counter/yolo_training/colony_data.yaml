@@ -1,0 +1,12 @@
+# colony_data.yaml
+
+# The absolute path to your main dataset folder
+path: /colony_data
+
+# Subdirectories for images and labels
+train: images/train
+val: images/val
+
+# Class Information (Crucial!)
+nc: 1           # Number of classes
+names: ['colony'] # The name of Class 0
