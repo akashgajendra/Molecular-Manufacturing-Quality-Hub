@@ -1,138 +1,148 @@
-# peptide_analysis.py
 import pymzml
 import numpy as np
 import os
-from Bio.SeqUtils import molecular_weight
 import logging
+
+# --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('peptide-worker')
 
-PPM_TOLERANCE = 40.0  # Tolerance for grouping and matching peaks
-MIN_INTENSITY_THRESHOLD = 5000.0 # Filter out very low noise peaks
-PROTON_MASS = 1.007276
+# --- CONFIGURATION ---
+PPM_TOLERANCE = 20.0  # Tightened slightly for targeted search accuracy
+PROTON_MASS = 1.00727647
+WATER_MASS = 18.01056
 DEFAULT_SEQUENCE = "DRVYIHPF"
-
 VALID_AA = set("ACDEFGHIKLMNPQRSTVWY")
 
+# Explicit mass dictionary for precise calculation
+AMINO_ACID_MASSES = {
+    'G': 57.02146, 'A': 71.03711, 'V': 99.06841, 'L': 113.08406, 'I': 113.08406, 
+    'M': 131.04049, 'P': 97.05276, 'F': 147.06841, 'Y': 163.06333, 'W': 186.07931,
+    'S': 87.03203, 'T': 101.04768, 'N': 114.04293, 'Q': 128.05858, 'C': 103.00919,
+    'D': 115.02694, 'E': 129.04259, 'K': 128.09496, 'R': 156.10111, 'H': 137.05891
+}
+
+# --- 1. HELPER FUNCTIONS ---
+
 def validate_peptide_sequence(seq: str):
+    """Ensures the sequence only contains valid amino acids."""
     invalid = set(seq) - VALID_AA
     if invalid:
         raise ValueError(f"Invalid amino acids in peptide sequence: {invalid}")
 
-# --- CORE SCIENTIFIC LOGIC FUNCTIONS ---
-def calculate_theoretical_mz(sequence, charge: int) -> float:
-    """Calculates the theoretical mass-to-charge (m/z) ratio."""
-    mass = molecular_weight(sequence, 'protein')
-    # m/z = (M + z*H+) / z
-    mz = (mass + charge * PROTON_MASS) / charge
+def calculate_theoretical_mz(sequence: str, charge: int) -> float:
+    """Calculates the exact theoretical m/z for the target sequence."""
+    if charge <= 0:
+        raise ValueError("Charge must be positive.")
+        
+    mass = sum(AMINO_ACID_MASSES[aa] for aa in sequence.upper()) + WATER_MASS
+    mz = (mass + (charge * PROTON_MASS)) / charge
     return mz
 
-def calculate_ppm_error(actual_mz, theoretical_mz):
-    """Calculates the parts-per-million (ppm) mass error."""
-    return abs(actual_mz - theoretical_mz) / theoretical_mz * 1e6
-
-def get_unique_features(mzml_file: str, ppm_tolerance: float, min_intensity: float) -> list:
+def find_peak_in_spectrum(spectrum, target_mz, ppm_tol=20.0):
     """
-    Reads the mzML file and groups unique m/z features.
-    (This is your adapted feature extraction logic)
+    Searches a single spectrum for the target m/z.
+    Returns: (found_mz, intensity) or (None, 0.0) if not found.
     """
-    if not os.path.exists(mzml_file):
-        raise FileNotFoundError(f"MZML file not found at: {mzml_file}")
-
-    run = pymzml.run.Reader(mzml_file)
-    features = {} 
-
-    for spectrum in run:
-        if spectrum.ms_level == 1:
-            try:
-                mz_intensity_data = spectrum.peaks('centroided')
-            except KeyError:
-                mz_intensity_data = spectrum.peaks
-            
-            if mz_intensity_data.size == 0:
-                continue
-            
-            for mz, intensity in mz_intensity_data:
-                if intensity < min_intensity:
-                    continue
-                
-                # --- Feature Grouping Logic ---
-                matched_feature = False
-                for feature_mz in sorted(features.keys()):
-                    if calculate_ppm_error(mz, feature_mz) <= ppm_tolerance:
-                        # Consolidate feature
-                        max_intensity = max(features[feature_mz], intensity)
-                        del features[feature_mz] 
-                        features[mz] = max_intensity 
-                        matched_feature = True
-                        break 
-                
-                if not matched_feature:
-                    features[mz] = intensity
-
-    return sorted(features.items(), key=lambda item: item[1], reverse=True)
-
-def find_target_peptide(all_features: list, theoretical_mz: float, ppm_tolerance: float) -> dict:
-    """Searches the extracted features for the target peptide's m/z."""
-    for actual_mz, max_intensity in all_features:
-        ppm_error = calculate_ppm_error(actual_mz, theoretical_mz)
+    # Handle pymzML version differences for peak access
+    try:
+        peaks = spectrum.peaks('centroided')
+    except:
+        peaks = spectrum.peaks
         
-        if ppm_error <= ppm_tolerance:
-            return {
-                "found": True,
-                "mz": actual_mz,
-                "intensity": max_intensity,
-                "ppm_error": ppm_error
-            }
-    
-    return {"found": False}
+    if len(peaks) == 0:
+        return None, 0.0
 
-# --- MAIN INTEGRATION FUNCTION ---
+    logger.debug(f"Searching spectrum {spectrum.ID} with {len(peaks)} peaks for target m/z {target_mz}")
+    # Vectorized Numpy Search
+    mzs = peaks[:, 0]
+    intensities = peaks[:, 1]
+    
+    # Calculate search window boundaries
+    tolerance_da = target_mz * (ppm_tol / 1e6)
+    low_bound = target_mz - tolerance_da
+    high_bound = target_mz + tolerance_da
+    
+    # Create a boolean mask for peaks inside the window
+    mask = (mzs >= low_bound) & (mzs <= high_bound)
+    
+    if np.any(mask):
+        # If multiple peaks fall in the window, take the most intense one
+        matches_intensities = intensities[mask]
+        matches_mzs = mzs[mask]
+        best_idx = np.argmax(matches_intensities)
+        return matches_mzs[best_idx], matches_intensities[best_idx]
+    
+    return None, 0.0
+
+# --- 2. MAIN INTEGRATION FUNCTION ---
 
 def run_peptide_qc(job_id: int, local_file_path: str, message_data: dict) -> dict:
     """
-    Executes the full peptide QC workflow.
-    
-    Returns:
-        dict: A dictionary representing the final analysis result for DB storage.
+    Executes the peptide QC workflow using the Targeted Scanning approach.
     """
     target_sequence = message_data.get("target_sequence", DEFAULT_SEQUENCE) 
-    target_charge = message_data.get("target_charge", 2) # Assume 2+ charge by default
+    target_charge = message_data.get("target_charge", 2) 
 
     logger.info(f"[{job_id}] Analyzing target: {target_sequence} @ {target_charge}+")
 
-    # 1. Calculate Theoretical m/z
+    # A. Validation and Calculation
     validate_peptide_sequence(target_sequence)
+    logger.info(f"[{job_id}] Sequence {target_sequence} was validated")
     theoretical_mz = calculate_theoretical_mz(target_sequence, target_charge)
     
-    # 2. Extract All Features
-    all_features = get_unique_features(local_file_path, PPM_TOLERANCE, MIN_INTENSITY_THRESHOLD)
-    
-    if not all_features:
-        raise ValueError("No features were extracted from the mzML file.")
-    
-    total_intensity = sum(intensity for mz, intensity in all_features)
+    if not os.path.exists(local_file_path):
+        raise FileNotFoundError(f"MZML file not found at: {local_file_path}")
 
-    # 3. Search for Target Peptide
-    target_result = find_target_peptide(all_features, theoretical_mz, PPM_TOLERANCE)
+    # B. Targeted Scanning Loop (The "Metal Detector")
+    run = pymzml.run.Reader(local_file_path)
     
-    # 4. Compile Final Results
-    if target_result["found"]:
-        relative_abundance = (target_result["intensity"] / total_intensity) * 100
-        qc_status = "PASS" if relative_abundance > 0.05 else "FAIL" # Example QC threshold
-        
-        return {
-            "job_id": job_id,
-            "sequence": target_sequence,
-            "found_in_sample": target_result["found"],
-            "relative_abundance_pct": round(relative_abundance, 3),
-            "qc_status": qc_status
-        }
-    else:
-        return {
-            "job_id": job_id,
-            "sequence": target_sequence,
-            "found_in_sample": False,
-            "relative_abundance_pct": 0.0,
-            "qc_status": "FAIL"
-        }
+    logger.info(f"[{job_id}] Opened MZML file: {local_file_path}")
+    max_peptide_intensity = 0.0
+    best_scan_total_intensity = 0.0 # TIC of the specific scan where the peptide was highest
+    best_observed_mz = None
+    
+    # Iterate through every scan in the file
+    for spectrum in run:
+        if spectrum.ms_level == 1:
+            # Search this specific spectrum
+            found_mz, intensity = find_peak_in_spectrum(spectrum, theoretical_mz, PPM_TOLERANCE)
+            
+            # If we found a signal stronger than any previous scan, record it
+            if intensity > max_peptide_intensity:
+                max_peptide_intensity = intensity
+                best_observed_mz = found_mz
+                
+                # Calculate the total intensity of THIS specific scan 
+                # (Used for correct relative abundance calculation)
+                try:
+                    peaks = spectrum.peaks('centroided')
+                except:
+                    peaks = spectrum.peaks
+                best_scan_total_intensity = np.sum(peaks[:, 1])
+
+    # C. Compile Final Results
+    logger.info(f"Computing final results for job {job_id}")
+    found = max_peptide_intensity > 0
+    relative_abundance = 0.0
+    
+    if found and best_scan_total_intensity > 0:
+        # Calculate purity relative to the specific scan's background
+        relative_abundance = (max_peptide_intensity / best_scan_total_intensity) * 100
+    
+    # QC Status logic (example threshold > 0.05% relative abundance)
+    qc_status = "PASS" if relative_abundance > 0.05 else "FAIL"
+
+    logger.info(f"[{job_id}] Result: Found={found}, Abundance={relative_abundance:.3f}%")
+
+    return {
+        "job_id": job_id,
+        "sequence": target_sequence,
+        "charge": target_charge,
+        "theoretical_mz": round(theoretical_mz, 4),
+        "found_in_sample": found,
+        "best_observed_mz": round(best_observed_mz, 4) if best_observed_mz else None,
+        "max_intensity": int(max_peptide_intensity),
+        "relative_abundance_pct": round(relative_abundance, 3),
+        "qc_status": qc_status
+    }
