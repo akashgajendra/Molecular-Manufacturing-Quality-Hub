@@ -1,3 +1,4 @@
+# peptide_analysis.py
 import pymzml
 import numpy as np
 import os
@@ -44,7 +45,6 @@ def find_peak_in_spectrum(spectrum, target_mz, ppm_tol=20.0):
     Searches a single spectrum for the target m/z.
     Returns: (found_mz, intensity) or (None, 0.0) if not found.
     """
-    # Handle pymzML version differences for peak access
     try:
         peaks = spectrum.peaks('centroided')
     except:
@@ -53,8 +53,6 @@ def find_peak_in_spectrum(spectrum, target_mz, ppm_tol=20.0):
     if len(peaks) == 0:
         return None, 0.0
 
-    logger.debug(f"Searching spectrum {spectrum.ID} with {len(peaks)} peaks for target m/z {target_mz}")
-    # Vectorized Numpy Search
     mzs = peaks[:, 0]
     intensities = peaks[:, 1]
     
@@ -71,8 +69,12 @@ def find_peak_in_spectrum(spectrum, target_mz, ppm_tol=20.0):
         matches_intensities = intensities[mask]
         matches_mzs = mzs[mask]
         best_idx = np.argmax(matches_intensities)
+        
+        # NOTE: np.True_ (from np.any) and np.float64 (from indexing) 
+        # are generated here.
         return matches_mzs[best_idx], matches_intensities[best_idx]
     
+    # NOTE: The return of 0.0 is a standard Python float, which is fine.
     return None, 0.0
 
 # --- 2. MAIN INTEGRATION FUNCTION ---
@@ -88,7 +90,6 @@ def run_peptide_qc(job_id: int, local_file_path: str, message_data: dict) -> dic
 
     # A. Validation and Calculation
     validate_peptide_sequence(target_sequence)
-    logger.info(f"[{job_id}] Sequence {target_sequence} was validated")
     theoretical_mz = calculate_theoretical_mz(target_sequence, target_charge)
     
     if not os.path.exists(local_file_path):
@@ -97,52 +98,53 @@ def run_peptide_qc(job_id: int, local_file_path: str, message_data: dict) -> dic
     # B. Targeted Scanning Loop (The "Metal Detector")
     run = pymzml.run.Reader(local_file_path)
     
-    logger.info(f"[{job_id}] Opened MZML file: {local_file_path}")
     max_peptide_intensity = 0.0
-    best_scan_total_intensity = 0.0 # TIC of the specific scan where the peptide was highest
+    best_scan_total_intensity = 0.0 
     best_observed_mz = None
     
-    # Iterate through every scan in the file
     for spectrum in run:
         if spectrum.ms_level == 1:
-            # Search this specific spectrum
             found_mz, intensity = find_peak_in_spectrum(spectrum, theoretical_mz, PPM_TOLERANCE)
             
-            # If we found a signal stronger than any previous scan, record it
             if intensity > max_peptide_intensity:
                 max_peptide_intensity = intensity
                 best_observed_mz = found_mz
                 
-                # Calculate the total intensity of THIS specific scan 
-                # (Used for correct relative abundance calculation)
                 try:
                     peaks = spectrum.peaks('centroided')
                 except:
                     peaks = spectrum.peaks
-                best_scan_total_intensity = np.sum(peaks[:, 1])
+                
+                # NOTE: The sum() here will result in a standard Python float 
+                # if max_peptide_intensity was set via standard Python assignment (0.0).
+                # To be absolutely safe with potential NumPy interactions, we can cast it.
+                best_scan_total_intensity = float(np.sum(peaks[:, 1]))
 
     # C. Compile Final Results
     logger.info(f"Computing final results for job {job_id}")
-    found = max_peptide_intensity > 0
+    
+    # --- FIX APPLIED HERE: CONVERTING NUMPY TYPES TO NATIVE PYTHON TYPES ---
+    found = bool(max_peptide_intensity > 0) # Use bool() for explicit conversion
     relative_abundance = 0.0
     
     if found and best_scan_total_intensity > 0:
-        # Calculate purity relative to the specific scan's background
-        relative_abundance = (max_peptide_intensity / best_scan_total_intensity) * 100
+        relative_abundance = (float(max_peptide_intensity) / best_scan_total_intensity) * 100
     
-    # QC Status logic (example threshold > 0.05% relative abundance)
     qc_status = "PASS" if relative_abundance > 0.05 else "FAIL"
 
     logger.info(f"[{job_id}] Result: Found={found}, Abundance={relative_abundance:.3f}%")
 
+    # --- FINAL RESULT CASTING (The most critical fix area) ---
     return {
         "job_id": job_id,
         "sequence": target_sequence,
         "charge": target_charge,
-        "theoretical_mz": round(theoretical_mz, 4),
-        "found_in_sample": found,
-        "best_observed_mz": round(best_observed_mz, 4) if best_observed_mz else None,
-        "max_intensity": int(max_peptide_intensity),
-        "relative_abundance_pct": round(relative_abundance, 3),
+        "theoretical_mz": round(float(theoretical_mz), 4), # Ensure float
+        # This field was logging as np.True_, so we explicitly convert the result of the comparison:
+        "found_in_sample": bool(found), 
+        # These values were likely np.float64, so we use .item() or float()
+        "best_observed_mz": round(float(best_observed_mz), 4) if best_observed_mz is not None else None,
+        "max_intensity": int(max_peptide_intensity), # Ensure int
+        "relative_abundance_pct": round(float(relative_abundance), 3), # Ensure float
         "qc_status": qc_status
     }
