@@ -118,7 +118,6 @@ def get_db():
         db.close()
 
 # New function to insert default user and job records for testing
-# Function to create tables on startup (used in development)
 def create_default_records(db_session):
     """Inserts a default user and test jobs if they don't already exist."""
     default_user_id = 1
@@ -190,6 +189,43 @@ def create_default_records(db_session):
         print(f"-> Inserted default job (ID: {default_job_id_peptide}), File, and Parameters for Peptide QC testing.")
     else:
         print(f"-> Default job (ID: {default_job_id_peptide}) already exists.")
+
+    # --- 4. Insert Default Job (ID '3') for Colony Counter Worker Test ---
+    default_job_id_colony = '3'
+    existing_job_colony = db_session.query(JobModel).filter(JobModel.job_id == default_job_id_colony).first()
+    
+    if not existing_job_colony:
+        # A. Create the Job Record
+        default_job_colony = JobModel(
+            job_id=default_job_id_colony,
+            user_id=default_user_id,
+            service_type="colony_counter", # Match the service type to the worker
+            status="PENDING"
+        )
+        db_session.add(default_job_colony)
+
+        # B. Create the File Record (simulating the image upload step) - CORRECTED PATH
+        default_file_colony = FileModel(
+            job_id=default_job_id_colony,
+            s3_uri="s3://quality-hub-dev/test/colony_counter/356.jpg", # Uses the corrected path
+            filename="356.jpg",
+            content_type="image/jpeg"
+        )
+        db_session.add(default_file_colony)
+
+        # C. Create the Parameter Record (simulating the JSON payload)
+        default_params_colony = ParameterModel(
+            job_id=default_job_id_colony,
+            payload={
+                "min_confidence": 0.5, # The confidence level for YOLO detection
+                "analysis_note": "Initial deployment test."
+            }
+        )
+        db_session.add(default_params_colony)
+        
+        print(f"-> Inserted default job (ID: {default_job_id_colony}), File, and Parameters for Colony Counter testing.")
+    else:
+        print(f"-> Default job (ID: {default_job_id_colony}) already exists.")
 
     db_session.commit()
 

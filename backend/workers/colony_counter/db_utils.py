@@ -27,12 +27,23 @@ class JobModel(Base):
     submitted_at = Column(DateTime, default=func.now())
     completed_at = Column(DateTime, nullable=True)
     submitter = relationship("UserModel", back_populates="jobs")
+    files = relationship("FileModel", uselist=False, back_populates="job")
 
 class ResultModel(Base):
     __tablename__ = "results"
     job_id = Column(String, ForeignKey("jobs.job_id"), primary_key=True)
     qc_status = Column(String, nullable=True)
     output_data = Column(JSONB, nullable=False)
+
+class FileModel(Base):
+    __tablename__ = "files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String, ForeignKey("jobs.job_id"), unique=True, nullable=False)
+    s3_uri = Column(String, nullable=False) # The full path in MinIO/S3
+    filename = Column(String, nullable=False)
+    content_type = Column(String)
+    job = relationship("JobModel", back_populates="files")
 
 def update_job_status(db: Session, job_id: str, status: str):
     job = db.query(JobModel).filter(JobModel.job_id == job_id).first()

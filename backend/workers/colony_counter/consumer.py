@@ -139,7 +139,7 @@ def start_worker():
 
             except Exception as e:
                 logger.error(f"Job {job_id} FAILED during processing: {e}")
-                update_job_status(db_session, job_id, "FAILED", error_message=str(e))
+                update_job_status(db_session, job_id, "FAILED")
                 consumer.commit(msg)
 
             finally:

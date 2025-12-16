@@ -1,88 +1,123 @@
-# backend/workers/colony_counter/colony_analysis.py
-
 import os
 import cv2
+import json
+import logging
+import shutil # Needed for cleaning up YOLO run directories
 from ultralytics import YOLO
 from minio import Minio 
-from models import ResultModel, FileModel # Assuming these are accessible
+from minio.error import S3Error
+from sqlalchemy.orm import Session # Correct import for type hinting
 
-# Configuration
+# IMPORTANT: You MUST ensure your FileModel and ResultModel are imported from where they are defined.
+# I will assume they are in a file named 'db_models'
+from db_utils import FileModel, ResultModel 
+
+# --- Configuration ---
 MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "quality-hub-dev")
+logger = logging.getLogger('colony-analysis')
 
 # --- Load Model Globally ---
 # The model is loaded ONLY ONCE when the worker container starts.
 try:
-    YOLO_MODEL = YOLO("colony_counter.pt")
-    print("SUCCESS: YOLO model loaded for Colony Counter.")
+    # Use a writable directory for YOLO config/runs inside Docker
+    os.environ['YOLO_CONFIG_DIR'] = '/tmp/Ultralytics' 
+    MODEL = YOLO("colony_counter.pt")
+    logger.info("SUCCESS: YOLO model loaded for Colony Counter.")
 except Exception as e:
-    print(f"ERROR: Failed to load YOLO model at startup: {e}")
-    YOLO_MODEL = None
+    logger.error(f"FATAL: Failed to load YOLO model at startup: {e}")
+    MODEL = None
 
-def run_colony_counter(db_session, job_id: str, local_image_path: str, analysis_params: dict, minio_client: Minio):
-    """Performs colony counting and generates an annotated output image."""
-    # Initialize local_output_path for clean-up in case of error
-    local_output_path = ""
+def run_colony_counter(
+    db_session: Session, 
+    job_id: str, 
+    input_file_path: str, 
+    analysis_params: dict, 
+    minio_client: Minio
+) -> ResultModel:
+    """
+    Performs colony counting, uploads the annotated output image, 
+    saves the FileModel record, and returns the ResultModel instance.
+    """
+    # Initialize local output directory for clean-up
+    output_dir = "" 
     
-    if not YOLO_MODEL:
+    if MODEL is None:
         raise RuntimeError("YOLO model is unavailable. Cannot process job.")
         
     try:
-        # 1. Run Object Detection Inference
         min_conf = analysis_params.get("min_confidence", 0.5) 
         
-        # Runs the CNN on the image
-        results = YOLO_MODEL(local_image_path, conf=min_conf, verbose=False)
-        result = results[0] # Get the result for the single image
+        # 1. Run YOLO Inference
+        # We use job_id as the run name to ensure a predictable path for the output file
+        results = MODEL.predict(
+            source=input_file_path, 
+            conf=min_conf, 
+            save=True, 
+            name=job_id, 
+            exist_ok=True,
+            verbose=False
+        )
         
         # 2. Extract Count
+        result = results[0] 
         colony_count = len(result.boxes)
         
-        # 3. Generate Annotated Image
-        # result.plot() uses OpenCV to draw bounding boxes directly onto the image
-        annotated_image = result.plot()
+        # 3. Define Local Output Path and S3 URI
+        input_filename = os.path.basename(input_file_path)
+        # The output path is runs/detect/job_id/filename.jpg
+        output_dir = MODEL.predictor.save_dir 
+        local_output_path = os.path.join(output_dir, input_filename)
         
-        # 4. Save Annotated Image Locally
-        output_filename = f"results_{job_id}_annotated.jpg"
-        local_output_path = f"/tmp/{output_filename}"
-        cv2.imwrite(local_output_path, annotated_image)
+        output_filename = f"{job_id}_annotated.jpg"
+        output_object_key = f"output/{job_id}/{output_filename}"
+        s3_output_uri = f"s3://{MINIO_BUCKET}/{output_object_key}"
+
+        # 4. Upload Annotated Image to MinIO
+        logger.info(f"Uploading output image from {local_output_path} to {output_object_key}")
         
-        # 5. Upload Annotated Image back to MinIO
-        output_object_key = f"results/colony_counter/{output_filename}"
         minio_client.fput_object(
             bucket_name=MINIO_BUCKET,
             object_name=output_object_key,
             file_path=local_output_path,
             content_type="image/jpeg"
         )
-        s3_output_uri = f"s3://{MINIO_BUCKET}/{output_object_key}"
 
-        # 6. Prepare Database Result and QC Logic
-        output_file_record = FileModel(
+        # 5. Create and Save FileModel Record (FIXED: Using Model Constructor)
+        file_record = FileModel(
             job_id=job_id,
             s3_uri=s3_output_uri,
             filename=output_filename,
             content_type="image/jpeg"
         )
-        db_session.add(output_file_record)
+        db_session.add(file_record) # This is now the correct object type
+
+        # 6. Prepare Final ResultModel and Return It (FIXED: Using Model Constructor)
+        qc_status = "PASS" if colony_count > 0 else "FAIL" 
         
-        output_data_payload = {
+        final_output_data = {
             "colony_count": colony_count,
-            "detected_locations": result.boxes.xyxy.tolist(),
-            "confidence_scores": result.boxes.conf.tolist(),
-            "output_image_uri": s3_output_uri
+            "min_confidence_used": min_conf,
+            "output_s3_uri": s3_output_uri 
         }
 
-        # Revised QC logic: Check if the model detected anything
-        qc_status = "PASS_DETECTED" if colony_count > 0 else "PASS_NO_DETECTIONS"
-        
-        return ResultModel(
+        result_model_instance = ResultModel(
             job_id=job_id,
             qc_status=qc_status,
-            output_data=output_data_payload
+            output_data=final_output_data 
         )
+        
+        return result_model_instance # Return the ResultModel instance
 
     except Exception as e:
-        # Clean up local file if possible
-        if os.path.exists(local_output_path):
-            os.remove(local_output_path)
+        logger.error(f"Colony Counter Analysis Error for job {job_id}: {e}")
+        # Clean up local files/directories on failure
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        
+        # Re-raise the exception so consumer.py can catch and update job status to FAILED
         raise RuntimeError(f"Colony Counter Analysis Failed: {e}")
+
+    finally:
+        # Clean up local YOLO run directory after successful completion
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
