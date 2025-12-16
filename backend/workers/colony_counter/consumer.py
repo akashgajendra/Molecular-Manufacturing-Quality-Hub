@@ -6,19 +6,11 @@ from minio import Minio
 from minio.error import S3Error
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
+# Removed: from dotenv import load_dotenv 
 from db_utils import update_job_status, update_job_result
-
-# --- Internal Module Imports (We'll assume you copy over the models/db files) ---
-# NOTE: In a real microservice setup, these modules would be packaged or shared.
-# For local development, ensure you have copies or symbolic links for these files
-# or include them in the worker's Docker build context.
-
-# For simplicity, we define placeholders for the required imports from the API:
-from colony_counter import run_colony_counter # Placeholder for the core analysis function
+from colony_counter import run_colony_counter 
 
 # --- Configuration ---
-load_dotenv()
 KAFKA_BROKER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = "topic-colony-jobs"
 CONSUMER_GROUP = "colony-counter-workers"
@@ -36,19 +28,20 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:54
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('colony-counter-worker')
 
-# --- Initialization Functions ---
-def init_db_session():
-    """Initializes the SQLAlchemy engine and session."""
-    try:
-        engine = create_engine(DATABASE_URL)
-        Session = sessionmaker(bind=engine)
-        return Session()
-    except Exception as e:
-        logger.error(f"Failed to initialize database session: {e}")
-        return None
+# --- Global DB Initialization (Performance Fix) ---
+try:
+    ENGINE = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(bind=ENGINE, autocommit=False, autoflush=False)
+    logger.info("Database Engine initialized successfully for pooling.")
+except Exception as e:
+    logger.critical(f"FATAL: Failed to initialize database engine: {e}")
+    ENGINE = None
+    SessionLocal = None
+
 
 def init_minio_client():
     """Initializes the MinIO client."""
+    # ... (same as before) ...
     try:
         client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
         return client
@@ -58,6 +51,7 @@ def init_minio_client():
 
 def init_kafka_consumer():
     """Initializes the Kafka Consumer."""
+    # ... (same as before) ...
     conf = {
         'bootstrap.servers': KAFKA_BROKER,
         'group.id': CONSUMER_GROUP,
@@ -75,8 +69,8 @@ def start_worker():
     consumer = init_kafka_consumer()
     minio_client = init_minio_client()
     
-    if not minio_client:
-        logger.critical("MinIO client failed to initialize. Worker cannot proceed.")
+    if not minio_client or not SessionLocal:
+        logger.critical("Critical client (MinIO/DB) failed to initialize. Worker cannot proceed.")
         return
 
     logger.info(f"Colony Counter Worker started, listening on topic: {KAFKA_TOPIC}")
@@ -92,21 +86,20 @@ def start_worker():
                     break
                 continue
 
-            # 1. Parse Message
+            # 1. Parse Message and Get Session
             message_data = json.loads(msg.value().decode('utf-8'))
             job_id = message_data['job_id']
             s3_uri = message_data['s3_uri']
             
-            db_session = init_db_session()
-            if not db_session: 
-                logger.error("Database session initialization failed. Skipping job processing.")
-                continue
+            # Use the global session factory
+            db_session = SessionLocal() 
 
             logger.info(f"Processing job_id: {job_id}")
             
             try:
                 # 2. Update DB Status (PROCESSING)
                 update_job_status(db_session, job_id, "PROCESSING")
+                # db_session is now in a transaction state after the first commit in update_job_status
 
                 # 3. Download File from MinIO (RETAINED)
                 _, object_key = s3_uri.split(f"s3://{MINIO_BUCKET}/")
@@ -116,22 +109,19 @@ def start_worker():
                 logger.info(f"Downloading {object_key} to {input_file_path}")
                 minio_client.fget_object(MINIO_BUCKET, object_key, input_file_path)
 
-                # 4. Run Analysis (CORE SCIENTIFIC LOGIC)
-                # Pass all necessary clients and data, but NOT an output path.
-                # The analysis function handles output file creation, MinIO upload, and cleanup.
+                # 4. Run Analysis
                 result_model = run_colony_counter(
                     db_session, 
                     job_id, 
                     input_file_path, 
                     message_data, 
-                    minio_client # Pass the minio client
+                    minio_client
                 ) 
                 
-                # 5. Update DB Status (COMPLETED/FAILED)
-                # The result_model contains the final qc_status (PASS/FAIL) and output URI.
+                # 5. Update DB Status (COMPLETED) - Includes file and result insertion/commit
                 update_job_result(db_session, job_id, result_model)
                 
-                # 6. Clean up (ONLY the input file is cleaned here)
+                # 6. Clean up
                 os.remove(input_file_path)
                 
                 consumer.commit(msg)
@@ -139,11 +129,19 @@ def start_worker():
 
             except Exception as e:
                 logger.error(f"Job {job_id} FAILED during processing: {e}")
+                
+                # --- ROBUSTNESS FIX ---
+                # 1. Rollback the session to clear the previous failed transaction state.
+                db_session.rollback()
+                # 2. Update status (this will begin a new transaction)
                 update_job_status(db_session, job_id, "FAILED")
-                consumer.commit(msg)
+                
+                consumer.commit(msg) # Commit the Kafka message so it isn't reprocessed endlessly
 
             finally:
-                db_session.close()
+                # Always close the session
+                if db_session:
+                    db_session.close()
 
         except KafkaException as e:
             logger.error(f"Kafka consumer error: {e}")

@@ -50,7 +50,7 @@ class FileModel(Base):
     __tablename__ = "files"
 
     id = Column(Integer, primary_key=True, index=True)
-    job_id = Column(String, ForeignKey("jobs.job_id"), unique=True, nullable=False)
+    job_id = Column(String, ForeignKey("jobs.job_id"), unique=False, nullable=False)
     
     s3_uri = Column(String, nullable=False) # The full path in MinIO/S3
     filename = Column(String, nullable=False)

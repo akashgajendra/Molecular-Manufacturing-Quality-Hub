@@ -6,8 +6,8 @@ from minio import Minio
 from confluent_kafka import Producer
 
 # --- Internal Imports ---
-from .database import get_db, JobModel, ParameterModel, FileModel, UserModel, create_tables
-from .models import PeptideJobSubmission, ColonyJobSubmission, CRISPRJobSubmission, JobStatus
+from ..shared.database import get_db, JobModel, ParameterModel, FileModel, UserModel, create_tables
+from ..shared.models import PeptideJobSubmission, ColonyJobSubmission, CRISPRJobSubmission, JobStatus
 from .auth import get_current_user # Assumes get_current_user is defined here
 from .dependencies import get_minio_client, get_kafka_producer, KAFKA_TOPIC_MAP
 
