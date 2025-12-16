@@ -12,7 +12,6 @@ MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "quality-hub-dev")
 # --- Load Model Globally ---
 # The model is loaded ONLY ONCE when the worker container starts.
 try:
-    # 'colony_counter.pt' is the file copied by the Dockerfile
     YOLO_MODEL = YOLO("colony_counter.pt")
     print("SUCCESS: YOLO model loaded for Colony Counter.")
 except Exception as e:
@@ -21,6 +20,9 @@ except Exception as e:
 
 def run_colony_counter(db_session, job_id: str, local_image_path: str, analysis_params: dict, minio_client: Minio):
     """Performs colony counting and generates an annotated output image."""
+    # Initialize local_output_path for clean-up in case of error
+    local_output_path = ""
+    
     if not YOLO_MODEL:
         raise RuntimeError("YOLO model is unavailable. Cannot process job.")
         
@@ -54,7 +56,7 @@ def run_colony_counter(db_session, job_id: str, local_image_path: str, analysis_
         )
         s3_output_uri = f"s3://{MINIO_BUCKET}/{output_object_key}"
 
-        # 6. Prepare Database Result
+        # 6. Prepare Database Result and QC Logic
         output_file_record = FileModel(
             job_id=job_id,
             s3_uri=s3_output_uri,
@@ -70,7 +72,8 @@ def run_colony_counter(db_session, job_id: str, local_image_path: str, analysis_
             "output_image_uri": s3_output_uri
         }
 
-        qc_status = "PASS" if colony_count > 10 else "FLAGGED_LOW_COUNT" # Example QC logic
+        # Revised QC logic: Check if the model detected anything
+        qc_status = "PASS_DETECTED" if colony_count > 0 else "PASS_NO_DETECTIONS"
         
         return ResultModel(
             job_id=job_id,

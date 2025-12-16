@@ -15,7 +15,7 @@ from db_utils import update_job_status, update_job_result
 # or include them in the worker's Docker build context.
 
 # For simplicity, we define placeholders for the required imports from the API:
-from colony_counter import run_colony_count # Placeholder for the core analysis function
+from colony_counter import run_colony_counter # Placeholder for the core analysis function
 
 # --- Configuration ---
 load_dotenv()
@@ -100,7 +100,7 @@ def start_worker():
             db_session = init_db_session()
             if not db_session: 
                 logger.error("Database session initialization failed. Skipping job processing.")
-                continue # Skip if DB is down
+                continue
 
             logger.info(f"Processing job_id: {job_id}")
             
@@ -108,44 +108,39 @@ def start_worker():
                 # 2. Update DB Status (PROCESSING)
                 update_job_status(db_session, job_id, "PROCESSING")
 
-                # 3. Download File from MinIO
-                # Note: The MinIO client needs the bucket name and object key
+                # 3. Download File from MinIO (RETAINED)
                 _, object_key = s3_uri.split(f"s3://{MINIO_BUCKET}/")
                 file_extension = object_key.split('.')[-1]
                 input_file_path = f"/tmp/{job_id}_input.{file_extension}"
-                output_file_path = f"/tmp/{job_id}_output.{file_extension}"
                 
                 logger.info(f"Downloading {object_key} to {input_file_path}")
                 minio_client.fget_object(MINIO_BUCKET, object_key, input_file_path)
 
                 # 4. Run Analysis (CORE SCIENTIFIC LOGIC)
-                # This function is where the heavy work happens
-                result_model = run_colony_count(db_session, job_id, input_file_path, message_data, output_file_path)
-                marked_object_key = f"{message_data['user_id']}/{job_id}/marked_{object_key.split('/')[-1]}"
-
-                minio_client.fput_object(
-                    MINIO_BUCKET,
-                    marked_object_key,
-                    output_file_path,
-                    result_model,
-                    content_type="image/png"
-                )
-
-                result_model.image_s3_uri = f"s3://{MINIO_BUCKET}/{marked_object_key}"
+                # Pass all necessary clients and data, but NOT an output path.
+                # The analysis function handles output file creation, MinIO upload, and cleanup.
+                result_model = run_colony_counter(
+                    db_session, 
+                    job_id, 
+                    input_file_path, 
+                    message_data, 
+                    minio_client # Pass the minio client
+                ) 
+                
                 # 5. Update DB Status (COMPLETED/FAILED)
-                # The result_model contains the final qc_status (PASS/FAIL)
+                # The result_model contains the final qc_status (PASS/FAIL) and output URI.
                 update_job_result(db_session, job_id, result_model)
                 
-                # 6. Clean up
+                # 6. Clean up (ONLY the input file is cleaned here)
                 os.remove(input_file_path)
-                os.remove(output_file_path)
+                
                 consumer.commit(msg)
-                logger.info(f"Job {job_id} COMPLETED with status")
+                logger.info(f"Job {job_id} COMPLETED with status: {result_model.qc_status}")
 
             except Exception as e:
                 logger.error(f"Job {job_id} FAILED during processing: {e}")
                 update_job_status(db_session, job_id, "FAILED", error_message=str(e))
-                consumer.commit(msg) # Commit message to avoid reprocessing infinite failures
+                consumer.commit(msg)
 
             finally:
                 db_session.close()
