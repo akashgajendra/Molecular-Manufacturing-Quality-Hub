@@ -4,7 +4,6 @@ import os
 import cv2
 from ultralytics import YOLO
 from minio import Minio 
-from db_utils import update_job_status # Assuming this is accessible
 from models import ResultModel, FileModel # Assuming these are accessible
 
 # Configuration
