@@ -1,12 +1,19 @@
 # colony_data.yaml
 
-# The absolute path to your main dataset folder
-path: /colony_data
+# 1. Root Directory: This is the path to your 'colony_dataset' folder.
+# The period (.) assumes the YAML file is in the same directory as the 'colony_dataset' folder.
+# If the YAML file is elsewhere, you must use the absolute path.
+path: ./colony_dataset
 
-# Subdirectories for images and labels
+# 2. Dataset Split: Paths to the training and validation image folders
+# These paths are relative to the 'path' defined above.
 train: images/train
 val: images/val
 
-# Class Information (Crucial!)
-nc: 1           # Number of classes
-names: ['colony'] # The name of Class 0
+# 3. Class Information
+# nc: Number of Classes (1 in your case)
+nc: 1
+
+# names: The list of class names. The order must match the class IDs in your .txt files.
+# Since your .txt files use '0', the first name in the list (index 0) must be 'colony'.
+names: ['colony']
