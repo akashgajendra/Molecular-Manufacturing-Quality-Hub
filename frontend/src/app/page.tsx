@@ -3,8 +3,7 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Microscope, ShieldCheck, Zap, ArrowRight } from "lucide-react";
-
+import { Microscope, Zap, Terminal, ShieldCheck, ArrowRight, Activity, FileSearch, Beaker } from "lucide-react";
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 selection:bg-indigo-500/30 overflow-hidden relative">
@@ -43,7 +42,6 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* --- HERO SECTION --- */}
       <main className="relative z-10 pt-24 pb-32">
         <div className="max-w-5xl mx-auto px-8">
           <motion.div
@@ -63,13 +61,12 @@ export default function LandingPage() {
             <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-white mb-8 leading-[0.85]">
               Molecular <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-indigo-600">
-                Manufacturing.
+                Manufacturing QC.
               </span>
             </h1>
             
             <p className="text-xl text-slate-400 max-w-xl mb-12 leading-relaxed font-medium">
-              A high-precision orchestration layer for genomic quality control. 
-              Verify sequences and count colonies with military-grade verifiable precision.
+              Unified oversight for manufacturing-scale synthetic biology. High-throughput sequence verification, mass-spectrometry analysis, and automated plate morphology
             </p>
 
             <div className="flex flex-col sm:flex-row gap-8 items-start">
@@ -90,28 +87,32 @@ export default function LandingPage() {
           </motion.div>
 
           {/* Feature Grid */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.8 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-32 text-left"
-          >
-            <DarkFeature 
-              icon={<ShieldCheck className="text-indigo-400" />}
-              title="Secure BFF Proxy"
-              description="Next.js server-side route handlers ensure your microservice API keys never touch the client."
-            />
-            <DarkFeature 
-              icon={<Zap className="text-indigo-400" />}
-              title="Real-time Polling"
-              description="Integrated TanStack Query keeps your analysis status synced every 5 seconds."
-            />
-            <DarkFeature 
-              icon={<Microscope className="text-indigo-400" />}
-              title="Binary Validation"
-              description="Strict Zod schemas for .mzML mass-spec data and CRISPR genomic sequence strings."
-            />
-          </motion.div>
+          {/* Service Directory */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4, duration: 0.8 }}
+          className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-32 text-left"
+        >
+          <ServiceCard 
+            icon={<Microscope className="text-indigo-400" />}
+            title="Plate Morphology"
+            service="Colony Analysis"
+            description="Automated CFU counting and morphology identification using computer vision pipelines."
+          />
+          <ServiceCard 
+            icon={<Zap className="text-indigo-400" />}
+            title="Peptide QC"
+            service="Mass-Spec Analysis"
+            description="Real-time verification of peptide synthesis via automated mass spectrometry data ingestion."
+          />
+          <ServiceCard 
+            icon={<Terminal className="text-indigo-400" />}
+            title="gRNA Targeting"
+            service="CRISPR Verification"
+            description="In-silico verification of gRNA target mismatch probabilities for manufacturing precision."
+          />
+        </motion.div>
         </div>
       </main>
 
@@ -135,6 +136,28 @@ function DarkFeature({ icon, title, description }: { icon: React.ReactNode, titl
         {icon}
       </div>
       <h3 className="font-bold text-lg text-white tracking-tight mb-3">{title}</h3>
+      <p className="text-slate-400 leading-relaxed text-sm font-medium">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function ServiceCard({ icon, title, service, description }: { icon: React.ReactNode, title: string, service: string, description: string }) {
+  return (
+    <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-sm group hover:border-indigo-500/50 transition-all">
+      <div className="flex justify-between items-start mb-6">
+        <div className="w-12 h-12 rounded-lg bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:scale-110 transition-transform">
+          {icon}
+        </div>
+        <span className="text-[10px] font-bold text-indigo-400 border border-indigo-400/30 px-2 py-1 rounded tracking-widest uppercase">
+          Worker Active
+        </span>
+      </div>
+      <div className="space-y-1 mb-4">
+        <h3 className="font-bold text-lg text-white tracking-tight">{title}</h3>
+        <p className="text-xs font-mono text-slate-500 uppercase tracking-wider">{service}</p>
+      </div>
       <p className="text-slate-400 leading-relaxed text-sm font-medium">
         {description}
       </p>
