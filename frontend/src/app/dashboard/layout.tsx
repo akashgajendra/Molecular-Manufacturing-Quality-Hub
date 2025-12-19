@@ -6,8 +6,8 @@ import { Microscope, PlusCircle, History, Settings, LogOut, Activity } from "luc
 import { cn } from "@/lib/utils";
 
 const navigation = [
+  { name: 'Analysis History', href: '/dashboard', icon: History },
   { name: 'New Analysis', href: '/dashboard/dispatch', icon: PlusCircle },
-  { name: 'Analysis History', href: '/dashboard/ledger', icon: History },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
