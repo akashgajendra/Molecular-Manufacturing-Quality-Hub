@@ -2,7 +2,8 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Download, Search, Filter, Inbox, PlusCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../src/lib/utils"
+;
 import Link from "next/link";
 
 // Set this to [] to test the empty state

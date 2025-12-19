@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Microscope, PlusCircle, History, Settings, LogOut, Activity } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../src/lib/utils"
+;
 
 const navigation = [
   { name: 'Analysis History', href: '/dashboard', icon: History },

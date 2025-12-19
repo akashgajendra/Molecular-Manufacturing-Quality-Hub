@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
+import { Button } from "../../@/components/ui/button";
 import Link from "next/link";
 import { Microscope, Zap, Terminal, ShieldCheck, ArrowRight, Activity, FileSearch, Beaker } from "lucide-react";
 export default function LandingPage() {

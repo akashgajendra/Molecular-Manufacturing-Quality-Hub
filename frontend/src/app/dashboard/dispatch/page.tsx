@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../../../@/components/ui/card";
+import { Input } from "../../../../@/components/ui/input";
+import { Button } from "../../../../@/components/ui/button";
+import { Label } from "../../../../@/components/ui/label";
 import { Microscope, FileUp, Zap, Beaker, Terminal, FileCode } from "lucide-react";
 
 const analysisSchema = z.object({
