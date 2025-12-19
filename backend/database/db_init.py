@@ -28,8 +28,11 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    firstName = Column(String, unique=True, index=True, nullable=False)
+    lastName = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
     organization = Column(String)
 
     jobs = relationship("JobModel", back_populates="submitter")
@@ -127,9 +130,12 @@ def create_default_records(db_session):
     if not existing_user:
         default_user = UserModel(
             id=default_user_id,
+            firstName="Dev",
+            lastName="Tester",
             username="test_user",
             password_hash="dev_test_hash", 
-            organization="DevTeam"
+            organization="DevTeam",
+            email="dev@test.com"
         )
         db_session.add(default_user)
         print(f"-> Inserted default user (ID: {default_user_id}).")

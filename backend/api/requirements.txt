@@ -14,3 +14,4 @@ python-jose
 minio
 confluent-kafka
 PyJWT
+python-multipart

@@ -1,6 +1,6 @@
 import json
 from uuid import uuid4
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Form, status
+from fastapi import FastAPI, File, Response, UploadFile, Depends, HTTPException, Form, status
 from sqlalchemy.orm import Session
 from minio import Minio
 from confluent_kafka import Producer
@@ -15,22 +15,6 @@ from auth import get_password_hash, authenticate_user, create_access_token, ACCE
 # Initialize DB tables (will only create if they don't exist)
 create_tables() 
 app = FastAPI(title="Molecular Manufacturing Quality Hub API")
-
-# --- PLACEHOLDER AUTHENTICATION ROUTES ---
-# NOTE: The actual login/register logic and token generation are assumed 
-# to be implemented in './auth.py' and referenced here.
-
-# Example:
-# @app.post("/api/auth/register", response_model=Token)
-# def register_user(...):
-#     # ... implementation ...
-#     pass
-
-# @app.post("/api/auth/login", response_model=Token)
-# def login_user(...):
-#     # ... implementation ...
-#     pass
-
 
 @app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
 async def register(user_data: dict, db: Session = Depends(get_db)):

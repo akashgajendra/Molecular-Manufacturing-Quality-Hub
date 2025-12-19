@@ -13,9 +13,13 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    firstName = Column(String, unique=True, index=True, nullable=False)
+    lastName = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
     organization = Column(String)
+
     jobs = relationship("JobModel", back_populates="submitter")
 
 class JobModel(Base):
