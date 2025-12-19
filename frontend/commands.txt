@@ -3,3 +3,4 @@ npm install lucide-react clsx tailwind-merge framer-motion zod react-hook-form @
 npm install @tanstack/react-query @tanstack/react-table
 npx shadcn@latest init
 https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app
+npx shadcn@latest add button card input tabs textarea badge table
