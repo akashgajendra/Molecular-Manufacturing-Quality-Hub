@@ -1,0 +1,5 @@
+npx create-next-app@latest frontend --typescript --tailwind --eslint
+npm install lucide-react clsx tailwind-merge framer-motion zod react-hook-form @hookform/resolvers
+npm install @tanstack/react-query @tanstack/react-table
+npx shadcn@latest init
+https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app
