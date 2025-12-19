@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from enum import Enum
 
 # --- Shared Utility Models ---
-class JobStatus(str):
+class JobStatus(str, Enum):
     """Enforce specific status values for a job."""
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"

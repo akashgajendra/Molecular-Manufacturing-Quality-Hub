@@ -13,3 +13,4 @@ python-jose
 # Infrastructure Clients
 minio
 confluent-kafka
+PyJWT

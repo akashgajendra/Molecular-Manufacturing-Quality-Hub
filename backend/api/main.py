@@ -6,11 +6,11 @@ from minio import Minio
 from confluent_kafka import Producer
 
 # --- Internal Imports ---
-from ..shared.database import get_db, JobModel, ParameterModel, FileModel, UserModel, create_tables
-from ..shared.models import PeptideJobSubmission, ColonyJobSubmission, CRISPRJobSubmission, JobStatus
-from .auth import get_current_user # Assumes get_current_user is defined here
-from .dependencies import get_minio_client, get_kafka_producer, KAFKA_TOPIC_MAP
-
+from database import get_db, JobModel, ParameterModel, FileModel, UserModel, create_tables
+from models import PeptideJobSubmission, ColonyJobSubmission, CRISPRJobSubmission, JobStatus
+from auth import get_current_user # Assumes get_current_user is defined here
+from dependencies import get_minio_client, get_kafka_producer, KAFKA_TOPIC_MAP
+from auth import get_password_hash, authenticate_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 # --- Setup ---
 # Initialize DB tables (will only create if they don't exist)
 create_tables() 
@@ -31,6 +31,57 @@ app = FastAPI(title="Molecular Manufacturing Quality Hub API")
 #     # ... implementation ...
 #     pass
 
+
+@app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
+async def register(user_data: dict, db: Session = Depends(get_db)):
+    """Registers a new lab node."""
+    existing_user = db.query(UserModel).filter(UserModel.username == user_data['username']).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Node ID already registered.")
+    
+    new_user = UserModel(
+        username=user_data['username'],
+        password_hash=get_password_hash(user_data['password']),
+        organization=user_data.get('organization', 'Independent Lab')
+    )
+    db.add(new_user)
+    db.commit()
+    return {"status": "Node Initialized"}
+
+@app.post("/api/auth/login")
+async def login(response: Response, credentials: dict, db: Session = Depends(get_db)):
+    """Verifies credentials and sets an HttpOnly cookie."""
+    user = authenticate_user(db, credentials['username'], credentials['password'])
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Security Key or Node ID"
+        )
+    
+    access_token = create_access_token(data={"sub": user.username})
+    
+    # Set the JWT in a secure, HttpOnly cookie
+    response.set_cookie(
+        key="helix_token",
+        value=access_token,
+        httponly=True,   # Prevents XSS theft
+        secure=False,    # Set to True in production (HTTPS)
+        samesite="lax",  # CSRF Protection
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    
+    return {"message": "Uplink Established", "user": user.username}
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    """Terminates the secure session."""
+    response.delete_cookie("helix_token")
+    return {"message": "Uplink Terminated"}
+
+# --- PROTECTED SAMPLE ROUTE ---
+@app.get("/api/auth/me")
+async def get_me(current_user: UserModel = Depends(get_current_user)):
+    return {"username": current_user.username, "org": current_user.organization}
 
 # ====================================================================
 # === 1. PEPTIDE QC JOB SUBMISSION ENDPOINT (Requires File Upload) ===
