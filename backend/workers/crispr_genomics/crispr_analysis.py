@@ -10,7 +10,6 @@ logger = logging.getLogger('crispr-analysis')
 
 # --- Placeholder Models ---
 class CRISPRJobResult:
-    # Minimal structure for the final output
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
     def model_dump(self): return self.__dict__
