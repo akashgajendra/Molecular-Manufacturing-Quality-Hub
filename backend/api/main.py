@@ -26,7 +26,10 @@ async def register(user_data: dict, db: Session = Depends(get_db)):
     new_user = UserModel(
         username=user_data['username'],
         password_hash=get_password_hash(user_data['password']),
-        organization=user_data.get('organization', 'Independent Lab')
+        organization=user_data.get('organization'),
+        firstName=user_data.get('firstName'),
+        lastName=user_data.get('lastName'),
+        email=user_data.get('email')
     )
     db.add(new_user)
     db.commit()
