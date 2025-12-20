@@ -91,7 +91,6 @@ def start_worker():
                 
                 # These lines are the crash point for bad payloads:
                 gRNA_sequence = message_data['gRNA_sequence']
-                genome_id = message_data.get('genome_id', 'sacCer3')
 
                 db_session = init_db_session()
                 if not db_session: 
@@ -105,7 +104,7 @@ def start_worker():
                 update_job_status(db_session, job_id, "PROCESSING")
 
                 # 3. Run Analysis (CORE SCIENTIFIC LOGIC)
-                result_model = run_crispr_genomics(job_id, gRNA_sequence, genome_id) 
+                result_model = run_crispr_genomics(job_id, gRNA_sequence) 
 
                 # 4. Update DB Status (COMPLETED/FAILED)
                 update_job_result(db_session, job_id, result_model)

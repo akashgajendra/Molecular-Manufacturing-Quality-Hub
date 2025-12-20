@@ -53,7 +53,7 @@ def run_alignment_tool(gRNA_sequence: str) -> int:
         os.remove(query_filename) 
 
 
-def run_crispr_genomics(job_id: str, gRNA_sequence: str, genome_id: str) -> CRISPRJobResult:
+def run_crispr_genomics(job_id: str, gRNA_sequence: str) -> CRISPRJobResult:
     """
     Runs the alignment and translates the hit count into a simplified specificity status.
     """

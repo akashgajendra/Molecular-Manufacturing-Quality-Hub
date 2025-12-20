@@ -199,34 +199,45 @@ async def submit_colony_counter_job(
 @app.post("/api/submit/crispr", status_code=status.HTTP_202_ACCEPTED)
 async def submit_crispr_job(
     guide_rna_sequence: str = Form(..., description="The gRNA sequence to check."),
-    genome_id: str = Form(..., description="Reference genome ID (e.g., 'GRCh38')."),
-    
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
     kafka_producer: Producer = Depends(get_kafka_producer)
 ):
     service_type = "crispr_genomics"
-    job_params = CRISPRJobSubmission(guide_rna_sequence=guide_rna_sequence, genome_id=genome_id)
     job_id = str(uuid4())
     
-    # --- 1. Database Logging (PostgreSQL Transaction) ---
-    db_job = JobModel(job_id=job_id, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
-    # FileModel is skipped as there is no large file upload
+    job_params = CRISPRJobSubmission(guide_rna_sequence=guide_rna_sequence)
+    # 1. Prepare DB objects (Not yet saved)
+    db_job = JobModel(
+        job_id=job_id, 
+        user_id=current_user.id, 
+        service_type=service_type, 
+        status=JobStatus.PENDING
+    )
     db_params = ParameterModel(job_id=job_id, payload=job_params.model_dump())
-
     db.add_all([db_job, db_params])
-    # db.commit() moved after Kafka message attempt
 
-    # --- 2. Kafka Queuing (Final Step) ---
-    kafka_message = {"job_id": job_id, "user_id": current_user.id, "service_type": service_type,
-                     "s3_uri": None, "parameters": job_params.model_dump()}
+    # 2. Prepare Kafka message
+    kafka_message = {
+        "job_id": job_id, 
+        "user_id": current_user.id, 
+        "service_type": service_type,
+        "parameters": job_params.model_dump()
+    }
+    
     try:
+        # 3. Attempt Kafka Dispatch
         topic = KAFKA_TOPIC_MAP[service_type]
-        kafka_producer.produce(topic, key=job_id.encode('utf-8'), value=json.dumps(kafka_message).encode('utf-8'))
+        kafka_producer.produce(topic, key=job_id, value=json.dumps(kafka_message))
         kafka_producer.flush() 
-        db.commit() # Commit only if Kafka message succeeded
-    except Exception:
+        
+        # 4. Only commit to DB if Kafka succeeded
+        db.commit() 
+    except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Messaging system failure. Job aborted.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+            detail="Uplink to Messaging Cluster failed. Job aborted."
+        )
 
-    return {"job_id": job_id, "status": JobStatus.PENDING, "message": "CRISPR job submitted and queued (No file upload required)."}
+    return {"job_id": job_id, "status": JobStatus.PENDING}
