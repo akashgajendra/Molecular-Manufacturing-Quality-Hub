@@ -4,7 +4,7 @@ export async function POST(request: Request) {
   try {
     const data = await request.formData();
     const method = data.get("method") as string;
-    const sampleId = data.get("sampleId") as string;
+    const sequenceEntry = data.get("sequenceEntry") as string;
     const file = data.get("file") as File;
 
     let targetUrl = "";
@@ -13,20 +13,20 @@ export async function POST(request: Request) {
     switch (method) {
       case "peptide":
         targetUrl = `${process.env.BACKEND_URL}/api/submit/peptide`;
-        backendFormData.append("sequence", sampleId);
+        backendFormData.append("sequence", sequenceEntry);
         backendFormData.append("mzml_file", file);
         break;
 
       case "colony":
         targetUrl = `${process.env.BACKEND_URL}/api/submit/colony`;
-        backendFormData.append("min_diameter_mm", "0.5");
+        // Hardcoding backend defaults as per backend source of trust
+        backendFormData.append("min_diameter_mm", "0.5"); 
         backendFormData.append("colony_image", file);
         break;
 
       case "crispr":
         targetUrl = `${process.env.BACKEND_URL}/api/submit/crispr`;
-        backendFormData.append("guide_rna_sequence", sampleId);
-        backendFormData.append("genome_id", "GRCh38");
+        backendFormData.append("guide_rna_sequence", sequenceEntry);
         break;
         
       default:
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const res = await fetch(targetUrl, {
       method: 'POST',
-      body: backendFormData, // Automatically sets multipart boundary
+      body: backendFormData,
     });
 
     const result = await res.json();
