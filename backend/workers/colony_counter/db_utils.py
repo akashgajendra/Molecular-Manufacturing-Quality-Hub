@@ -28,6 +28,7 @@ class JobModel(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     job_id = Column(String, unique=True, primary_key=False, nullable=False) # PK is the UUID string
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    display_id = Column(String, unique=True, index=True, nullable=True)
     service_type = Column(String, index=True, nullable=False) # e.g., 'peptide_qc'
     status = Column(String, default="PENDING", nullable=False)
     
@@ -39,6 +40,7 @@ class JobModel(Base):
     parameters = relationship("ParameterModel", uselist=False, back_populates="job")
     results = relationship("ResultModel", uselist=False, back_populates="job")
     notifications = relationship("NotificationModel", back_populates="job")
+
 
 class ResultModel(Base):
     __tablename__ = "results"

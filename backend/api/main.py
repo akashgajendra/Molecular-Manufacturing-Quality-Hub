@@ -217,3 +217,58 @@ async def submit_crispr_job(
         return {"job_id": display_id, "status": "FAILED"}
 
     return {"job_id": display_id, "status": JobStatus.PENDING}
+
+
+@app.get("/api/jobs", status_code=status.HTTP_200_OK)
+async def get_user_jobs(
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Fetch all jobs for the current user, ordered by most recent
+    jobs = db.query(JobModel).filter(
+        JobModel.user_id == current_user.id
+    ).order_by(JobModel.submitted_at.desc()).all()
+
+    response_data = []
+    for job in jobs:
+        # Default placeholder for PENDING jobs
+        result_display = {"label": "UPLINK", "value": "AWAITING_DATA", "type": "pending"}
+        
+        # Handle ACTIVE/PROCESSING jobs
+        if job.status == "PROCESSING":
+             result_display = {"label": "NODE", "value": "SEQUENCING...", "type": "pending"}
+
+        # Handle COMPLETED jobs based on service type
+        elif job.status == "COMPLETED" and job.results:
+            if job.service_type == "peptide_qc":
+                result_display = {
+                    "label": "PURITY", 
+                    "value": f"{job.results.output_data.get('purity', 0)}%", 
+                    "type": "data"
+                }
+            elif job.service_type == "colony_counter":
+                result_display = {
+                    "label": "COUNT", 
+                    "value": str(job.results.output_data.get('count', 0)), 
+                    "type": "image"
+                }
+            elif job.service_type == "crispr":
+                result_display = {
+                    "label": "MATCHES", 
+                    "value": str(job.results.output_data.get('matches', 'N/A')), 
+                    "type": "data"
+                }
+        
+        # Handle FAILED jobs
+        elif job.status == "FAILED":
+            result_display = {"label": "ERROR", "value": "TERMINATED", "type": "warning"}
+
+        response_data.append({
+            "id": job.display_id or f"ID-{job.id}",
+            "method": job.service_type.replace("_", " ").title(),
+            "status": job.status,
+            "result": result_display,
+            "submitted_at": job.submitted_at.isoformat()
+        })
+
+    return response_data

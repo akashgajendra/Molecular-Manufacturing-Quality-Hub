@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../../../@/componen
 import { Input } from "../../../../@/components/ui/input";
 import { Button } from "../../../../@/components/ui/button";
 import { Label } from "../../../../@/components/ui/label";
-import { Microscope, FileUp, Zap, Beaker, Terminal, FileCode } from "lucide-react";
+import { Microscope, FileUp, Zap, Beaker, Terminal, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 const analysisSchema = z.object({
   method: z.enum(["colony", "peptide", "crispr"]),
@@ -20,8 +20,11 @@ type AnalysisFormValues = z.infer<typeof analysisSchema>;
 export default function NewAnalysisPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  // NEW: Status Modal State
+  const [status, setStatus] = useState<{ type: 'success' | 'error', message: string, jobId?: string } | null>(null);
 
-  const { register, handleSubmit, watch, setValue } = useForm<AnalysisFormValues>({
+  const { register, handleSubmit, watch, setValue, reset } = useForm<AnalysisFormValues>({
     resolver: zodResolver(analysisSchema),
     defaultValues: { method: "peptide" }
   });
@@ -31,6 +34,8 @@ export default function NewAnalysisPage() {
 
   const onSubmit = async (data: AnalysisFormValues) => {
     setIsSubmitting(true);
+    setStatus(null); // Reset status
+    
     const formData = new FormData();
     formData.append("method", data.method);
     if (data.sequenceEntry) formData.append("sequenceEntry", data.sequenceEntry);
@@ -39,20 +44,61 @@ export default function NewAnalysisPage() {
     try {
       const response = await fetch("/api/submit-job", { method: "POST", body: formData });
       const result = await response.json();
-      if (response.ok) alert(`Success: Job ${result.job_id} Dispatched`);
-      else alert(`Error: ${result.detail || 'Dispatch failed'}`);
+      
+      if (response.ok) {
+        setStatus({ type: 'success', message: 'Job Submitted', jobId: result.job_id });
+        // Optional: Reset form on success
+        reset();
+        setSelectedFile(null);
+      } else {
+        setStatus({ type: 'error', message: result.detail || 'Dispatch Protocol Failed' });
+      }
     } catch (error) {
-      console.error("Submission Error:", error);
+      setStatus({ type: 'error', message: 'Network Interrupt: Backend Unreachable' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="relative max-w-6xl mx-auto space-y-8">
+      {/* --- STATUS OVERLAY MODAL --- */}
+      {status && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-6">
+          <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-sm w-full shadow-2xl text-center space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-center">
+              {status.type === 'success' ? (
+                <div className="bg-emerald-500/10 p-4 rounded-full">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-400" />
+                </div>
+              ) : (
+                <div className="bg-red-500/10 p-4 rounded-full">
+                  <XCircle className="w-12 h-12 text-red-400" />
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <h2 className="text-white font-black uppercase tracking-widest text-xl">{status.message}</h2>
+              {status.jobId && (
+                <p className="text-indigo-400 font-mono text-sm tracking-tighter">JOB_ID: {status.jobId}</p>
+              )}
+            </div>
+
+            <Button 
+              onClick={() => setStatus(null)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold uppercase tracking-widest"
+            >
+              Acknowledge
+            </Button>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-3xl font-black text-white uppercase tracking-tight">New Analysis</h1>
       
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        {/* Method Sidebar */}
         <div className="md:col-span-1 space-y-4">
            {["colony", "peptide", "crispr"].map((m) => (
              <button key={m} type="button" onClick={() => { setValue("method", m as any); setSelectedFile(null); }}
@@ -65,6 +111,7 @@ export default function NewAnalysisPage() {
            ))}
         </div>
 
+        {/* Configuration Card */}
         <div className="md:col-span-3">
           <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-xl">
             <CardHeader className="border-b border-slate-800/50 p-10">
@@ -73,23 +120,22 @@ export default function NewAnalysisPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-10 space-y-10">
+              {/* Sequence Input */}
               {selectedMethod !== "colony" && (
                 <div className="space-y-3 relative">
                   <div className="flex justify-between items-end">
                     <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                       {selectedMethod === "crispr" ? "gRNA Sequence Entry" : "Peptide Sequence"}
                     </Label>
-                   {(selectedMethod === "crispr" || selectedMethod === "peptide") && (
                     <span className="text-[10px] font-black text-indigo-400 uppercase tabular-nums">
-                      {currentSequence.length}{" "}
-                      {selectedMethod === "crispr" ? "Bases" : "Amino Acids"}
+                      {currentSequence.length} {selectedMethod === "crispr" ? "Bases" : "Amino Acids"}
                     </span>
-                  )}
                   </div>
                   <Input {...register("sequenceEntry")} className="bg-slate-950 border-slate-800 h-16 text-lg font-mono text-white uppercase tracking-widest placeholder:text-slate-700" placeholder="ENTER SEQUENCE" />
                 </div>
               )}
 
+              {/* File Upload */}
               {selectedMethod !== "crispr" && (
                 <label className="border-2 border-dashed border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 bg-slate-950/50 hover:border-indigo-500/50 cursor-pointer">
                   <input type="file" className="hidden" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
@@ -106,7 +152,11 @@ export default function NewAnalysisPage() {
               )}
 
               <Button disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-16 font-black uppercase tracking-[0.3em] transition-all">
-                {isSubmitting ? "Dispatching..." : "Dispatch Worker"}
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" /> Dispatching...
+                  </div>
+                ) : "Dispatch Worker"}
               </Button>
             </CardContent>
           </Card>
