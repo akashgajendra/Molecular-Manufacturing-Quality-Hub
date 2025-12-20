@@ -41,10 +41,10 @@ class UserModel(Base):
 class JobModel(Base):
     __tablename__ = "jobs"
 
-    job_id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    job_id = Column(String, unique=True, primary_key=False, nullable=False) # PK is the UUID string
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
-    service_type = Column(String, index=True, nullable=False)
+    service_type = Column(String, index=True, nullable=False) # e.g., 'peptide_qc'
     status = Column(String, default="PENDING", nullable=False)
     
     submitted_at = Column(DateTime, default=func.now())
@@ -55,7 +55,7 @@ class JobModel(Base):
     parameters = relationship("ParameterModel", uselist=False, back_populates="job")
     results = relationship("ResultModel", uselist=False, back_populates="job")
     notifications = relationship("NotificationModel", back_populates="job")
-
+    
 # --- 4. Files Table (MinIO/S3 Storage) ---
 class FileModel(Base):
     __tablename__ = "files"

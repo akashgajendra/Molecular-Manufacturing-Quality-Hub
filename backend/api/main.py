@@ -1,4 +1,6 @@
 import json
+import random
+import string
 from uuid import uuid4
 from fastapi import FastAPI, File, Response, UploadFile, Depends, HTTPException, Form, status
 from sqlalchemy.orm import Session
@@ -14,6 +16,11 @@ from dependencies import get_minio_client, get_kafka_producer, KAFKA_TOPIC_MAP
 # --- Setup ---
 create_tables() 
 app = FastAPI(title="Molecular Manufacturing Quality Hub API")
+
+# --- Helper for Pretty IDs (Guaranteed Unique via DB Primary Key) ---
+def format_display_id(db_id: int):
+    """Converts database primary key to ANL-00001 format (5 digits)"""
+    return f"ANL-{db_id:05d}"
 
 # ====================================================================
 # === AUTHENTICATION ENDPOINTS ===
@@ -72,147 +79,141 @@ async def get_me(current_user: UserModel = Depends(get_current_user)):
     return {"username": current_user.username, "org": current_user.organization}
 
 # ====================================================================
-# === 1. PEPTIDE QC JOB SUBMISSION (File + Sequence) ===
+# === 1. PEPTIDE QC JOB SUBMISSION ===
 # ====================================================================
 
 @app.post("/api/submit/peptide", status_code=status.HTTP_202_ACCEPTED)
 async def submit_peptide_qc_job(
-    sequence: str = Form(..., description="Amino acid sequence."),
-    mzml_file: UploadFile = File(..., description="The raw MS data file (.mzML)."),
+    sequence: str = Form(...),
+    mzml_file: UploadFile = File(...),
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
     minio_client: Minio = Depends(get_minio_client),
     kafka_producer: Producer = Depends(get_kafka_producer)
 ):
     service_type = "peptide_qc"
-    job_id = str(uuid4())
-    job_params = PeptideJobSubmission(sequence=sequence, purity_threshold=100.0) 
+    job_uuid = str(uuid4()) 
     
-    if not mzml_file.filename or not mzml_file.filename.lower().endswith('.mzml'):
-         raise HTTPException(status_code=400, detail="File must be a valid .mzML file.")
-
-    # --- MinIO Storage ---
-    file_key = f"{current_user.id}/{job_id}/{mzml_file.filename}"
+    # 1. Create DB Record to lock in a UNIQUE ID
+    db_job = JobModel(job_id=job_uuid, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
+    db.add(db_job)
+    db.flush() # Secure the auto-increment 'id' from the DB
+    
+    display_id = format_display_id(db_job.id)
+    db_job.display_id = display_id
+    
+    # 2. Storage Upload
+    file_key = f"{current_user.id}/{job_uuid}/{mzml_file.filename}"
     s3_uri = f"s3://{minio_client._bucket_name}/{file_key}"
     
     try:
-        minio_client.put_object(
-            bucket_name=minio_client._bucket_name,
-            object_name=file_key,
-            data=mzml_file.file, 
-            length=mzml_file.size,
-            content_type=mzml_file.content_type
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Storage uplink failure (MinIO).")
-
-    # --- Database Transaction ---
-    db_job = JobModel(job_id=job_id, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
-    db_file = FileModel(job_id=job_id, s3_uri=s3_uri, filename=mzml_file.filename, content_type=mzml_file.content_type)
-    db_params = ParameterModel(job_id=job_id, payload=job_params.model_dump())
-    db.add_all([db_job, db_file, db_params])
-
-    # --- Kafka Messaging ---
-    kafka_message = {
-        "job_id": job_id, "user_id": current_user.id, "service_type": service_type,
-        "s3_uri": s3_uri, "parameters": job_params.model_dump()
-    }
-    
-    try:
-        topic = KAFKA_TOPIC_MAP[service_type]
-        kafka_producer.produce(topic, key=job_id, value=json.dumps(kafka_message))
-        kafka_producer.flush() 
-        db.commit() 
+        minio_client.put_object(bucket_name=minio_client._bucket_name, object_name=file_key, data=mzml_file.file, length=mzml_file.size, content_type=mzml_file.content_type)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=503, detail="Message broker unreachable. Job rolled back.")
+        raise HTTPException(status_code=500, detail="MinIO Storage Failure")
 
-    return {"job_id": job_id, "status": JobStatus.PENDING}
+    # 3. Commit Records
+    job_params = PeptideJobSubmission(sequence=sequence, purity_threshold=100.0)
+    db.add_all([
+        FileModel(job_id=job_uuid, s3_uri=s3_uri, filename=mzml_file.filename, content_type=mzml_file.content_type),
+        ParameterModel(job_id=job_uuid, payload=job_params.model_dump())
+    ])
+    db.commit()
+
+    # 4. Async Dispatch
+    try:
+        kafka_message = {"job_id": job_uuid, "display_id": display_id, "user_id": current_user.id, "service_type": service_type, "s3_uri": s3_uri, "parameters": job_params.model_dump()}
+        kafka_producer.produce(KAFKA_TOPIC_MAP[service_type], key=job_uuid, value=json.dumps(kafka_message))
+        kafka_producer.flush()
+    except Exception:
+        db_job.status = "FAILED"
+        db.commit() 
+        return {"job_id": display_id, "status": "FAILED"}
+
+    return {"job_id": display_id, "status": JobStatus.PENDING}
 
 # ====================================================================
-# === 2. COLONY COUNTER JOB SUBMISSION (File Only) ===
+# === 2. COLONY COUNTER JOB SUBMISSION ===
 # ====================================================================
 
 @app.post("/api/submit/colony", status_code=status.HTTP_202_ACCEPTED)
 async def submit_colony_counter_job(
-    min_diameter_mm: float = Form(default=0.5),
     colony_image: UploadFile = File(...),
+    min_diameter_mm: float = Form(default=0.5),
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
     minio_client: Minio = Depends(get_minio_client),
     kafka_producer: Producer = Depends(get_kafka_producer)
 ):
     service_type = "colony_counter"
-    job_id = str(uuid4())
-    job_params = ColonyJobSubmission(min_diameter_mm=min_diameter_mm)
+    job_uuid = str(uuid4())
     
-    # --- MinIO Storage ---
-    file_key = f"{current_user.id}/{job_id}/{colony_image.filename}"
+    db_job = JobModel(job_id=job_uuid, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
+    db.add(db_job)
+    db.flush()
+    
+    display_id = format_display_id(db_job.id)
+    db_job.display_id = display_id
+    
+    file_key = f"{current_user.id}/{job_uuid}/{colony_image.filename}"
     s3_uri = f"s3://{minio_client._bucket_name}/{file_key}"
     
     try:
-        minio_client.put_object(
-            bucket_name=minio_client._bucket_name, object_name=file_key, data=colony_image.file,
-            length=colony_image.size, content_type=colony_image.content_type
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Storage uplink failure (MinIO).")
-
-    # --- Database Transaction ---
-    db_job = JobModel(job_id=job_id, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
-    db_file = FileModel(job_id=job_id, s3_uri=s3_uri, filename=colony_image.filename, content_type=colony_image.content_type)
-    db_params = ParameterModel(job_id=job_id, payload=job_params.model_dump())
-    db.add_all([db_job, db_file, db_params])
-
-    # --- Kafka Messaging ---
-    kafka_message = {
-        "job_id": job_id, "user_id": current_user.id, "service_type": service_type,
-        "s3_uri": s3_uri, "parameters": job_params.model_dump()
-    }
-    try:
-        topic = KAFKA_TOPIC_MAP[service_type]
-        kafka_producer.produce(topic, key=job_id, value=json.dumps(kafka_message))
-        kafka_producer.flush() 
-        db.commit() 
+        minio_client.put_object(bucket_name=minio_client._bucket_name, object_name=file_key, data=colony_image.file, length=colony_image.size, content_type=colony_image.content_type)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=503, detail="Message broker unreachable. Job rolled back.")
+        raise HTTPException(status_code=500, detail="MinIO Storage Failure")
 
-    return {"job_id": job_id, "status": JobStatus.PENDING}
+    job_params = ColonyJobSubmission(min_diameter_mm=min_diameter_mm)
+    db.add_all([
+        FileModel(job_id=job_uuid, s3_uri=s3_uri, filename=colony_image.filename, content_type=colony_image.content_type),
+        ParameterModel(job_id=job_uuid, payload=job_params.model_dump())
+    ])
+    db.commit()
+
+    try:
+        kafka_message = {"job_id": job_uuid, "display_id": display_id, "user_id": current_user.id, "service_type": service_type, "s3_uri": s3_uri, "parameters": job_params.model_dump()}
+        kafka_producer.produce(KAFKA_TOPIC_MAP[service_type], key=job_uuid, value=json.dumps(kafka_message))
+        kafka_producer.flush()
+    except Exception:
+        db_job.status = "FAILED"
+        db.commit()
+        return {"job_id": display_id, "status": "FAILED"}
+
+    return {"job_id": display_id, "status": JobStatus.PENDING}
 
 # ====================================================================
-# === 3. CRISPR GENOMICS JOB SUBMISSION (Sequence Only) ===
+# === 3. CRISPR GENOMICS JOB SUBMISSION ===
 # ====================================================================
 
 @app.post("/api/submit/crispr", status_code=status.HTTP_202_ACCEPTED)
 async def submit_crispr_job(
-    guide_rna_sequence: str = Form(..., description="The gRNA sequence string."),
+    guide_rna_sequence: str = Form(...),
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
     kafka_producer: Producer = Depends(get_kafka_producer)
 ):
     service_type = "crispr_genomics"
-    job_id = str(uuid4())
+    job_uuid = str(uuid4())
+    
+    db_job = JobModel(job_id=job_uuid, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
+    db.add(db_job)
+    db.flush()
+    
+    display_id = format_display_id(db_job.id)
+    db_job.display_id = display_id
+    
     job_params = CRISPRJobSubmission(guide_rna_sequence=guide_rna_sequence)
-    
-    # --- Database Transaction (No FileModel needed) ---
-    db_job = JobModel(job_id=job_id, user_id=current_user.id, service_type=service_type, status=JobStatus.PENDING)
-    db_params = ParameterModel(job_id=job_id, payload=job_params.model_dump())
-    db.add_all([db_job, db_params])
+    db.add(ParameterModel(job_id=job_uuid, payload=job_params.model_dump()))
+    db.commit()
 
-    # --- Kafka Messaging ---
-    kafka_message = {
-        "job_id": job_id, "user_id": current_user.id, "service_type": service_type,
-        "s3_uri": None, "parameters": job_params.model_dump()
-    }
-    
     try:
-        topic = KAFKA_TOPIC_MAP[service_type]
-        kafka_producer.produce(topic, key=job_id, value=json.dumps(kafka_message))
-        kafka_producer.flush() 
-        db.commit() 
+        kafka_message = {"job_id": job_uuid, "display_id": display_id, "user_id": current_user.id, "service_type": service_type, "s3_uri": None, "parameters": job_params.model_dump()}
+        kafka_producer.produce(KAFKA_TOPIC_MAP[service_type], key=job_uuid, value=json.dumps(kafka_message))
+        kafka_producer.flush()
     except Exception:
-        db.rollback()
-        raise HTTPException(status_code=503, detail="Message broker unreachable. Job rolled back.")
+        db_job.status = "FAILED"
+        db.commit()
+        return {"job_id": display_id, "status": "FAILED"}
 
-    return {"job_id": job_id, "status": JobStatus.PENDING}
+    return {"job_id": display_id, "status": JobStatus.PENDING}

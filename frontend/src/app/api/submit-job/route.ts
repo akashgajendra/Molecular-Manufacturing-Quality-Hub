@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('helix_token')?.value;
+
     const data = await request.formData();
     const method = data.get("method") as string;
     const sequenceEntry = data.get("sequenceEntry") as string;
     const file = data.get("file") as File;
-
+    console.log("Received data:", { method, sequenceEntry, file });
     let targetUrl = "";
     const backendFormData = new FormData();
 
@@ -36,6 +40,9 @@ export async function POST(request: Request) {
     const res = await fetch(targetUrl, {
       method: 'POST',
       body: backendFormData,
+      headers: {
+        'Cookie': `helix_token=${token}`
+      },
     });
 
     const result = await res.json();

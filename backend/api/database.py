@@ -33,9 +33,9 @@ class UserModel(Base):
 class JobModel(Base):
     __tablename__ = "jobs"
 
-    job_id = Column(String, primary_key=True, index=True) # PK is the UUID string
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    job_id = Column(String, unique=True, primary_key=False, nullable=False) # PK is the UUID string
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
     service_type = Column(String, index=True, nullable=False) # e.g., 'peptide_qc'
     status = Column(String, default="PENDING", nullable=False)
     

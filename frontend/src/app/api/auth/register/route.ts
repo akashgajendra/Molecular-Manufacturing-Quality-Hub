@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const backendUrl = `${process.env.INTERNAL_API_URL}/api/auth/register`;
+    const backendUrl = `${process.env.BACKEND_URL}/api/auth/register`;
 
     const backendRes = await fetch(backendUrl, {
       method: 'POST',

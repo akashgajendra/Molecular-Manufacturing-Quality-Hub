@@ -83,7 +83,6 @@ class CRISPRJobSubmission(BaseModel):
     """Schema for user submitting a new CRISPR job."""
     guide_rna_sequence: str = Field(..., min_length=15, max_length=25, 
                                     description="The gRNA sequence to check for off-targets.")
-    genome_id: str = Field(..., description="Reference genome ID (e.g., 'GRCh38').")
 
 class OffTargetHit(BaseModel):
     """Details for a single off-target binding location."""
