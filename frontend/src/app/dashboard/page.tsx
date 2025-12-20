@@ -1,6 +1,6 @@
 "use client";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../@/components/ui/table";
 import { Download, Search, Filter, Inbox, PlusCircle } from "lucide-react";
 import { cn } from "../../../src/lib/utils"
 ;
