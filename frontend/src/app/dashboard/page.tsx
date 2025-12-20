@@ -82,7 +82,7 @@ export default function AnalysisHistoryPage() {
               <TableRow className="border-slate-800">
                 <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500 py-4 px-6">Analysis ID</TableHead>
                 <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Method</TableHead>
-                <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">QC Status</TableHead>
+                <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">QC Status</TableHead>
                 <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500 text-right px-8">Technical Result</TableHead>
               </TableRow>
             </TableHeader>
@@ -97,29 +97,33 @@ export default function AnalysisHistoryPage() {
                 return (
                   <TableRow key={item.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <TableCell className="font-mono font-bold text-indigo-400 py-5 px-6">
-                      {item.id}
+                      {item.id.slice(0, 8)}
                     </TableCell>
                     
-                    <TableCell>
+                    <TableCell className="font-bold text-slate-200">
+                      {item.method.replace('_', ' ')}
+                    </TableCell>
+
+                    {/* --- COLUMN 3: QC STATUS --- */}
+                    <TableCell className="text-center">
                       <span className={cn(
                         "px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-tighter border",
                         isSuccess && "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-                        (isScientificFail || isSystemError) && "bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.05)]",
-                        isWarning && "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                        (isScientificFail || isSystemError) && "bg-rose-500/10 text-rose-400 border-rose-500/20",
+                        isWarning && "bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.05)]",
                         isPending && "bg-slate-500/10 text-slate-400 border-slate-500/20 animate-pulse"
                       )}>
                         {item.status}
                       </span>
                     </TableCell>
                     
-                    <TableCell className="text-right px-8">
+                    {/* --- COLUMN 4: TECHNICAL RESULT --- */}
+                    <TableCell className="text-right px-8 py-5">
                       <div className="flex items-center justify-end gap-5">
                         <div className="flex flex-col items-end">
                           <span className="text-[9px] uppercase text-slate-600 font-bold tracking-widest mb-0.5">
-                            {/* Map the correct label based on node response */}
-                            {(isSuccess || isScientificFail || isWarning) ? item.result.label : "NODE_STATUS"}
+                            {(isSuccess || isScientificFail || isWarning) ? "SPECIFICITY" : item.result.label}
                           </span>
-                          
                           <span className={cn(
                             "text-sm font-mono font-bold",
                             isSuccess && "text-emerald-400",
@@ -128,11 +132,9 @@ export default function AnalysisHistoryPage() {
                             isPending && "text-slate-500 italic"
                           )}>
                             {isSystemError ? "TERMINATED" : 
-                             (isSuccess || isScientificFail || isWarning) ? item.result.value : 
-                             "SYNCING..."}
+                             (isSuccess || isScientificFail || isWarning) ? item.result.value : "SYNCING_NODE..."}
                           </span>
                         </div>
-
                         <div className="w-9 h-9 flex items-center justify-center">
                           {(isScientificFail || isSystemError) ? (
                             <AlertCircle className="w-5 h-5 text-rose-500" />
