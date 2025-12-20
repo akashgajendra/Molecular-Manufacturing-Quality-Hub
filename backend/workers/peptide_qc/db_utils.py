@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine, Column, String, DateTime, Integer, ForeignKey, func
+from sqlalchemy import create_engine, Column, String, DateTime, Integer, ForeignKey, func, Text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker, relationship
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, BOOLEAN
 import datetime
 
 SQLALCHEMY_DATABASE_URL = "postgresql://user:password@postgres:5432/db"
@@ -21,6 +21,8 @@ class UserModel(Base):
     organization = Column(String)
 
     jobs = relationship("JobModel", back_populates="submitter")
+
+# --- 3. Jobs Table (Workflow Status) ---
 class JobModel(Base):
     __tablename__ = "jobs"
 
@@ -40,11 +42,59 @@ class JobModel(Base):
     results = relationship("ResultModel", uselist=False, back_populates="job")
     notifications = relationship("NotificationModel", back_populates="job")
 
+# --- 4. Files Table (MinIO/S3 Storage) ---
+class FileModel(Base):
+    __tablename__ = "files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String, ForeignKey("jobs.job_id"), unique=False, nullable=False)
+    
+    s3_uri = Column(String, nullable=False) # The full path in MinIO/S3
+    filename = Column(String, nullable=False)
+    content_type = Column(String)
+
+    job = relationship("JobModel", back_populates="files")
+
+# --- 5. Parameters Table (Job Input Configuration) ---
+class ParameterModel(Base):
+    __tablename__ = "parameters"
+
+    # Use job_id as the primary key and foreign key to enforce 1-to-1 relationship
+    job_id = Column(String, ForeignKey("jobs.job_id"), primary_key=True)
+    
+    # Stores the raw Pydantic submission model as JSON
+    # JSONB is highly flexible and indexed in PostgreSQL
+    payload = Column(JSONB, nullable=False)
+
+    job = relationship("JobModel", back_populates="parameters")
+
+# --- 6. Results Table (Worker Output) ---
 class ResultModel(Base):
     __tablename__ = "results"
+
     job_id = Column(String, ForeignKey("jobs.job_id"), primary_key=True)
-    qc_status = Column(String, nullable=True)
+    
+    qc_status = Column(String, nullable=True) # Final PASS/FAIL or Score
+    
+    # Stores the worker's Pydantic result model as JSON (e.g., scores, counts, etc.)
     output_data = Column(JSONB, nullable=False)
+
+    job = relationship("JobModel", back_populates="results")
+
+# --- 7. Notifications Table (User Alerts) ---
+class NotificationModel(Base):
+    __tablename__ = "notifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String, ForeignKey("jobs.job_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Redundant FK, but useful for quick queries
+    
+    message = Column(Text, nullable=False) # e.g., "Peptide QC job 123 is COMPLETE."
+    type = Column(String, default="status")
+    is_read = Column(BOOLEAN, default=False)
+    created_at = Column(DateTime, default=func.now())
+
+    job = relationship("JobModel", back_populates="notifications")
 
 def update_job_status(db: Session, job_id: str, status: str):
     job = db.query(JobModel).filter(JobModel.job_id == job_id).first()

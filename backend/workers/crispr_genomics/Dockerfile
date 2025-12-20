@@ -12,6 +12,12 @@ RUN apt-get update && \
     apt-get install -y bowtie2 && \
     rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+COPY ./backend/workers/crispr_genomics/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Change this to copy the CRISPR worker code
+COPY ./backend/workers/crispr_genomics/ .
 # === Download and Index the Genome (The Data) ===
 # This small genome index is used for fast, reproducible testing
 # WORKDIR /genomes

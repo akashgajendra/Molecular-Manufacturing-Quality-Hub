@@ -182,9 +182,11 @@ services:
     #       inside this build context.
     build:
       # Context must be the worker's folder to find its specific Dockerfile and requirements.txt
-      context: ./backend/workers/crispr_genomics 
+      context: .
+      dockerfile: ./backend/workers/crispr_genomics/Dockerfile
     container_name: crispr_genomics_worker
-    # command: python consumer.py
+    command: python3 consumer.py
+    working_dir: /app
     volumes:
       # Mount the worker code for live development
       - ./backend/workers/crispr_genomics:/app 
