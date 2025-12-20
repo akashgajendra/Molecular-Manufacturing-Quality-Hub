@@ -105,32 +105,32 @@ export default function AnalysisHistoryPage() {
                       {item.status}
                     </span>
                   </TableCell>
-<TableCell className="text-right px-8">
-  <div className="flex items-center justify-end gap-5">
-    {/* Side-by-side technical data */}
-    <div className="flex items-center gap-3">
-      <span className="text-[10px] uppercase text-slate-500 font-bold tracking-widest whitespace-nowrap">
-        {item.result.label}
-      </span>
-      <span className={cn(
-        "text-sm font-mono font-bold",
-        item.result.type === "warning" ? "text-rose-500" : "text-slate-200"
-      )}>
-        {item.result.value}
-      </span>
-    </div>
+                <TableCell className="text-right px-8">
+                  <div className="flex items-center justify-end gap-5">
+                    {/* Side-by-side technical data */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] uppercase text-slate-500 font-bold tracking-widest whitespace-nowrap">
+                        {item.result.label}
+                      </span>
+                      <span className={cn(
+                        "text-sm font-mono font-bold",
+                        item.result.type === "warning" ? "text-rose-500" : "text-slate-200"
+                      )}>
+                        {item.result.value}
+                      </span>
+                    </div>
 
-    {/* Only render the housing if it's an image/downloadable */}
-    {item.result.type === "image" ? (
-      <div className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-950/50 transition-colors group-hover:border-indigo-500/40">
-        <Download className="w-4 h-4 text-indigo-400 cursor-pointer hover:text-white" />
-      </div>
-    ) : (
-      /* Spacer to keep alignment perfect for rows without buttons */
-      <div className="w-9 h-9" />
-    )}
-  </div>
-</TableCell>
+                    {/* Only render the housing if it's an image/downloadable */}
+                    {item.result.type === "image" ? (
+                      <div className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-950/50 transition-colors group-hover:border-indigo-500/40">
+                        <Download className="w-4 h-4 text-indigo-400 cursor-pointer hover:text-white" />
+                      </div>
+                    ) : (
+                      /* Spacer to keep alignment perfect for rows without buttons */
+                      <div className="w-9 h-9" />
+                    )}
+                  </div>
+                </TableCell>
                 </TableRow>
               ))}
             </TableBody>
