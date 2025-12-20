@@ -46,9 +46,8 @@ export default function LoginPage() {
 
       if (response.ok) {
         // Uplink established, redirecting to core systems
-        router.push("/dashboard/history");
+        router.push("/dashboard");
       } else {
-        // Capture specific error from BFF/FastAPI
         setAuthError(result.detail || "Access Denied: Terminal mismatch.");
       }
     } catch (err) {

@@ -53,7 +53,7 @@ export default function RegisterPage() {
       if (response.ok) {
         setIsSuccess(true);
         // Delay redirect so user sees the success state
-        setTimeout(() => router.push("/login"), 2500);
+        setTimeout(() => router.push("/login"), 3600);
       } else {
         setError(result.detail || "Registration rejected by security node.");
       }
