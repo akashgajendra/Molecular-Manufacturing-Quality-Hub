@@ -6,6 +6,16 @@ from fastapi import FastAPI, File, Response, UploadFile, Depends, HTTPException,
 from sqlalchemy.orm import Session
 from minio import Minio
 from confluent_kafka import Producer
+import boto3
+from botocore.exceptions import ClientError
+
+# Initialize MinIO/S3 Client
+s3_client = boto3.client(
+    's3',
+    endpoint_url="http://your-minio-endpoint:9000", # Update with your actual endpoint
+    aws_access_key_id="YOUR_ACCESS_KEY",
+    aws_secret_access_key="YOUR_SECRET_KEY",
+)
 
 # --- Internal Imports ---
 from database import get_db, JobModel, ParameterModel, FileModel, UserModel, create_tables
@@ -218,51 +228,58 @@ async def submit_crispr_job(
 
     return {"job_id": display_id, "status": JobStatus.PENDING}
 
+def get_presigned_url(s3_uri):
+    if not s3_uri: return None
+    try:
+        # Parse s3://bucket/key
+        parts = s3_uri.replace("s3://", "").split("/", 1)
+        bucket_name, object_name = parts[0], parts[1]
+        
+        return s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': object_name},
+            ExpiresIn=3600 # 1 hour
+        )
+    except Exception:
+        return None
 
 @app.get("/api/jobs", status_code=status.HTTP_200_OK)
-async def get_user_jobs(
-    current_user: UserModel = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    # Fetch all jobs for the current user, ordered by most recent
-    jobs = db.query(JobModel).filter(
-        JobModel.user_id == current_user.id
-    ).order_by(JobModel.submitted_at.desc()).all()
-
+async def get_user_jobs(current_user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
+    jobs = db.query(JobModel).filter(JobModel.user_id == current_user.id).order_by(JobModel.submitted_at.desc()).all()
     response_data = []
+
     for job in jobs:
-        # Default placeholder for PENDING jobs
-        result_display = {"label": "UPLINK", "value": "AWAITING_DATA", "type": "pending"}
+        result_display = {"label": "UPLINK", "value": "AWAITING_DATA", "type": "pending", "download_url": None}
         
-        # Handle ACTIVE/PROCESSING jobs
         if job.status == "PROCESSING":
-             result_display = {"label": "NODE", "value": "SEQUENCING...", "type": "pending"}
+             result_display["label"], result_display["value"] = "NODE", "SEQUENCING..."
 
-        # Handle COMPLETED jobs based on service type
         elif job.status in ["COMPLETED", "PASS", "WARNING", "FAILED", "FAIL"] and job.results:
+            data = job.results.output_data
+            
             if job.service_type == "peptide_qc":
-                result_display = {
-                    "label": "PURITY", 
-                    "value": f"{job.results.output_data.get('purity', 0)}%", 
-                    "type": "data"
-                }
-            elif job.service_type == "colony_counter":
-                result_display = {
-                    "label": "COUNT", 
-                    "value": str(job.results.output_data.get('count', 0)), 
-                    "type": "image"
-                }
-            elif job.service_type == "crispr_genomics":
-                result_display = {
-                    "label": "SPECIFICITY",
-                    "value": job.results.output_data.get("specificity_summary", "N/A"),
-                    "type": "summary"
-                }
-        
-        # Handle FAILED jobs
-        elif job.status == "FAILED":
-            result_display = {"label": "ERROR", "value": "TERMINATED", "type": "warning"}
+                found = data.get('found_in_sample', False)
+                result_display.update({
+                    "label": f"MS {'DETECTED' if found else 'NOT DETECTED'}",
+                    "value": f"{data.get('relative_abundance_pct', 0):.3f}% ABUNDANCE"
+                })
 
+            elif job.service_type == "colony_counter":
+                # Extract count and generate download link
+                count = data.get('colony_count', 0)
+                s3_uri = data.get('output_s3_uri')
+                result_display.update({
+                    "label": "COLONY COUNT",
+                    "value": f"{count} UNITS DETECTED",
+                    "download_url": get_presigned_url(s3_uri)
+                })
+
+            elif job.service_type == "crispr_genomics":
+                result_display.update({
+                    "label": "SPECIFICITY",
+                    "value": data.get("specificity_summary", "N/A")
+                })
+        
         response_data.append({
             "id": job.display_id or f"ID-{job.id}",
             "method": job.service_type.replace("_", " ").title(),
@@ -270,5 +287,4 @@ async def get_user_jobs(
             "result": result_display,
             "submitted_at": job.submitted_at.isoformat()
         })
-
     return response_data
