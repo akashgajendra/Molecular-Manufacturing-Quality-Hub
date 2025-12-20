@@ -102,15 +102,20 @@ def update_job_status(db: Session, job_id: str, status: str):
         job.status = status
         db.commit()
 
-def update_job_result(db: Session, job_id: str, result_model):
+def update_job_result(db: Session, job_id: str, result_data: dict):
     job = db.query(JobModel).filter(JobModel.job_id == job_id).first()
+    
     if job:
-        job.status = "COMPLETED"
+        # Use the status returned by the scientific logic (PASS/FAIL/WARNING)
+        # This is what makes your UI turn Red or Green!
+        job.status = result_data.get("qc_status", "COMPLETED")
         job.completed_at = datetime.datetime.now()
+        
         result = ResultModel(
             job_id=job_id,
-            qc_status = result_model.qc_status,
-            output_data=result_model()
+            qc_status=result_data.get("qc_status"),
+            output_data=result_data 
         )
+        
         db.add(result)
         db.commit()

@@ -180,30 +180,28 @@ services:
   crispr_genomics_worker:
     # NOTE: The Bowtie2 installation and genome download is handled by the Dockerfile 
     #       inside this build context.
-    build:
-      # Context must be the worker's folder to find its specific Dockerfile and requirements.txt
-      context: .
-      dockerfile: ./backend/workers/crispr_genomics/Dockerfile
-    container_name: crispr_genomics_worker
-    command: python3 consumer.py
-    working_dir: /app
-    volumes:
-      # Mount the worker code for live development
-      - ./backend/workers/crispr_genomics:/app 
-      # Mount the entire project root volume as /data if Bowtie2 needs access to a large volume later.
-      # However, for the current setup, the genome index is downloaded inside the image.
-    depends_on:
-      kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_started
-      db_init:
-        condition: service_completed_successfully
-    env_file:
-      - .env
-    # We remove 'minio' dependency as the core Bowtie2 analysis doesn't need file storage
-    # If the job input (gRNA) were a huge file, it would be needed.
-    restart: on-failure
+      build:
+        # Context must be the worker's folder to find its specific Dockerfile and requirements.txt
+        context: ./backend/workers/crispr_genomics 
+      container_name: crispr_genomics_worker
+      # command: python consumer.py
+      volumes:
+        # Mount the worker code for live development
+        - ./backend/workers/crispr_genomics:/app 
+        # Mount the entire project root volume as /data if Bowtie2 needs access to a large volume later.
+        # However, for the current setup, the genome index is downloaded inside the image.
+      depends_on:
+        kafka:
+          condition: service_healthy
+        postgres:
+          condition: service_started
+        db_init:
+          condition: service_completed_successfully
+      env_file:
+        - .env
+      # We remove 'minio' dependency as the core Bowtie2 analysis doesn't need file storage
+      # If the job input (gRNA) were a huge file, it would be needed.
+      restart: on-failure
 
 volumes:
   minio_data:

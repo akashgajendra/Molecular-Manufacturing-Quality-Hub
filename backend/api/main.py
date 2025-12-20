@@ -239,7 +239,7 @@ async def get_user_jobs(
              result_display = {"label": "NODE", "value": "SEQUENCING...", "type": "pending"}
 
         # Handle COMPLETED jobs based on service type
-        elif job.status == "COMPLETED" and job.results:
+        elif job.status in ["COMPLETED", "PASS", "WARNING", "FAILED", "FAIL"] and job.results:
             if job.service_type == "peptide_qc":
                 result_display = {
                     "label": "PURITY", 
@@ -252,11 +252,11 @@ async def get_user_jobs(
                     "value": str(job.results.output_data.get('count', 0)), 
                     "type": "image"
                 }
-            elif job.service_type == "crispr":
+            elif job.service_type == "crispr_genomics":
                 result_display = {
-                    "label": "MATCHES", 
-                    "value": str(job.results.output_data.get('matches', 'N/A')), 
-                    "type": "data"
+                    "label": "SPECIFICITY",
+                    "value": job.results.output_data.get("specificity_summary", "N/A"),
+                    "type": "summary"
                 }
         
         # Handle FAILED jobs

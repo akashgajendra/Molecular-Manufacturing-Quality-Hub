@@ -80,7 +80,7 @@ def run_crispr_genomics(job_id: str, gRNA_sequence: str) -> CRISPRJobResult:
 
 
     # 3. Return the Final Simplified Result
-    return CRISPRJobResult(
+    result = CRISPRJobResult(
         job_id=job_id,
         service_type='crispr_genomics',
         qc_status=status,
@@ -88,3 +88,6 @@ def run_crispr_genomics(job_id: str, gRNA_sequence: str) -> CRISPRJobResult:
         specificity_summary=summary,
         total_alignments_found=total_hits
     )
+    
+    # Return the dictionary version
+    return result.model_dump()
