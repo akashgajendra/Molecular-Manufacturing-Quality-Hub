@@ -97,11 +97,7 @@ export default function AnalysisHistoryPage() {
                 return (
                   <TableRow key={item.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <TableCell className="font-mono font-bold text-indigo-400 py-5 px-6">
-                      {item.id.slice(0, 8)}
-                    </TableCell>
-                    
-                    <TableCell className="font-bold text-slate-200">
-                      {item.method.replace('_', ' ')}
+                      {item.id}
                     </TableCell>
 
                     {/* --- COLUMN 3: QC STATUS --- */}
