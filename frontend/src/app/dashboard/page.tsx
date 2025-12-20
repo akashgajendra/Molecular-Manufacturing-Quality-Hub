@@ -99,6 +99,10 @@ export default function AnalysisHistoryPage() {
                     <TableCell className="font-mono font-bold text-indigo-400 py-5 px-6">
                       {item.id}
                     </TableCell>
+                    
+                    <TableCell className="font-bold text-slate-200">
+                      {item.method.replace('_', ' ')}
+                    </TableCell>
 
                     {/* --- COLUMN 3: QC STATUS --- */}
                     <TableCell className="text-center">
