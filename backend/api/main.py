@@ -259,41 +259,50 @@ async def get_user_jobs(current_user: UserModel = Depends(get_current_user), db:
     response_data = []
 
     for job in jobs:
-        result_display = {"label": "UPLINK", "value": "AWAITING_DATA", "type": "pending", "download_url": None}
-        
-        if job.status == "PROCESSING":
-             result_display["label"], result_display["value"] = "NODE", "SEQUENCING..."
+        # Default starting state
+        final_status = job.status
+        result_display = {"label": "UPLINK", "value": "AWAITING_DATA", "download_url": None}
 
-        elif job.status in ["COMPLETED", "PASS", "WARNING", "FAILED", "FAIL"] and job.results:
+        if job.status in ["COMPLETED", "PASS", "WARNING", "FAIL", "FAILED"] and job.results:
             data = job.results.output_data
             
-            if job.service_type == "peptide_qc":
+            # --- COLONY COUNTER LOGIC ---
+            if job.service_type == "colony_counter":
+                count = data.get('colony_count', 0)
+                # Logic: If 0 colonies found, it's a FAIL for this diagnostic
+                final_status = "PASS" if count > 0 else "FAIL"
+                result_display.update({
+                    "label": "COLONY COUNT",
+                    "value": f"{count} UNITS DETECTED",
+                    "download_url": get_presigned_url(data.get('output_s3_uri'))
+                })
+
+            # --- PEPTIDE QC LOGIC ---
+            elif job.service_type == "peptide_qc":
                 found = data.get('found_in_sample', False)
+                # Logic: If peptide not found, mark as FAIL
+                final_status = "PASS" if found else "FAIL"
                 result_display.update({
                     "label": f"MS {'DETECTED' if found else 'NOT DETECTED'}",
                     "value": f"{data.get('relative_abundance_pct', 0):.3f}% ABUNDANCE"
                 })
 
-            elif job.service_type == "colony_counter":
-                # Extract count and generate download link
-                count = data.get('colony_count', 0)
-                s3_uri = data.get('output_s3_uri')
-                result_display.update({
-                    "label": "COLONY COUNT",
-                    "value": f"{count} UNITS DETECTED",
-                    "download_url": get_presigned_url(s3_uri)
-                })
-
+            # --- CRISPR GENOMICS LOGIC ---
             elif job.service_type == "crispr_genomics":
+                # Standardize FAILED (infrastructure) to FAIL (result)
+                if job.status == "FAILED": final_status = "FAIL"
                 result_display.update({
                     "label": "SPECIFICITY",
                     "value": data.get("specificity_summary", "N/A")
                 })
-        
+
+        # Final Infrastructure Cleanup
+        if final_status == "FAILED": final_status = "FAIL"
+
         response_data.append({
             "id": job.display_id or f"ID-{job.id}",
             "method": job.service_type.replace("_", " ").title(),
-            "status": job.status,
+            "status": final_status, # The simplified status
             "result": result_display,
             "submitted_at": job.submitted_at.isoformat()
         })
