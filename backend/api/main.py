@@ -8,14 +8,22 @@ from minio import Minio
 from confluent_kafka import Producer
 import boto3
 from botocore.exceptions import ClientError
+import os
 
-# Initialize MinIO/S3 Client
-s3_client = boto3.client(
-    's3',
-    endpoint_url="http://your-minio-endpoint:9000", # Update with your actual endpoint
-    aws_access_key_id="YOUR_ACCESS_KEY",
-    aws_secret_access_key="YOUR_SECRET_KEY",
-)
+minio_endpoint = os.getenv("MINIO_ENDPOINT")
+minio_access_key = os.getenv("MINIO_ROOT_USER")
+minio_secret_key = os.getenv("MINIO_ROOT_PASSWORD")
+minio_bucket_name = os.getenv("MINIO_BUCKET_NAME")
+
+def get_s3_client():
+    """Lazy initialization of S3 client to avoid startup errors"""
+    return boto3.client(
+        's3',
+        endpoint_url=minio_endpoint,
+        aws_access_key_id=minio_access_key,
+        aws_secret_access_key=minio_secret_key,
+        region_name='us-east-1'
+    )
 
 # --- Internal Imports ---
 from database import get_db, JobModel, ParameterModel, FileModel, UserModel, create_tables
@@ -232,15 +240,17 @@ def get_presigned_url(s3_uri):
     if not s3_uri: return None
     try:
         # Parse s3://bucket/key
-        parts = s3_uri.replace("s3://", "").split("/", 1)
-        bucket_name, object_name = parts[0], parts[1]
+        s3_path = s3_uri.replace("s3://", "")
+        bucket_name, _, object_name = s3_path.partition("/")
         
+        s3_client = get_s3_client()
         return s3_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': bucket_name, 'Key': object_name},
-            ExpiresIn=3600 # 1 hour
+            ExpiresIn=3600  # 1 hour
         )
-    except Exception:
+    except Exception as e:
+        print(f"Error generating presigned URL: {e}")
         return None
 
 @app.get("/api/jobs", status_code=status.HTTP_200_OK)
