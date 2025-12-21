@@ -1,8 +1,6 @@
 # HelixGuard — Molecular Manufacturing Quality Hub
 
-HelixGuard is a distributed, microservices-based platform for high-throughput biological validation and quality control.
-
-Built to handle the high-concurrency demands of modern biotechnology, the platform orchestrates a decentralized fleet of specialized worker services to automate molecular verification workflows. It serves as a proof-of-concept for replacing fragmented, manual QC processes with a unified, scalable, data-driven pipeline.
+HelixGuard is a distributed, microservices-based platform for high-throughput biological validation and quality control. I've built it to handle the high-concurrency demands of the biotech environment, the platform orchestrates a decentralized fleet of specialized worker services to automate molecular verification workflows. It serves as a proof-of-concept for replacing fragmented, manual QC processes with a unified, scalable, data-driven pipeline.
 
 ## Application Workflow
 
