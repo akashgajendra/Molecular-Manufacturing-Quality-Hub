@@ -10,7 +10,7 @@ import boto3
 from botocore.exceptions import ClientError
 import os
 
-minio_endpoint = os.getenv("MINIO_ENDPOINT")
+minio_endpoint = os.getenv("MINIO_PRESIGNED_URL_ENDPOINT").strip().rstrip('/')
 minio_access_key = os.getenv("MINIO_ROOT_USER")
 minio_secret_key = os.getenv("MINIO_ROOT_PASSWORD")
 minio_bucket_name = os.getenv("MINIO_BUCKET_NAME")
@@ -241,13 +241,19 @@ def get_presigned_url(s3_uri):
     try:
         # Parse s3://bucket/key
         s3_path = s3_uri.replace("s3://", "")
-        bucket_name, _, object_name = s3_path.partition("/")
+        
+        parts = s3_path.split("/", 1)
+        if len(parts) < 2:
+            return None
+            
+        bucket_name = parts[0]
+        object_name = parts[1]
         
         s3_client = get_s3_client()
         return s3_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': bucket_name, 'Key': object_name},
-            ExpiresIn=3600  # 1 hour
+            ExpiresIn=3600
         )
     except Exception as e:
         print(f"Error generating presigned URL: {e}")
@@ -255,21 +261,22 @@ def get_presigned_url(s3_uri):
 
 @app.get("/api/jobs", status_code=status.HTTP_200_OK)
 async def get_user_jobs(current_user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Explicitly join the Results to ensure data is available in one query
     jobs = db.query(JobModel).filter(JobModel.user_id == current_user.id).order_by(JobModel.submitted_at.desc()).all()
+    
     response_data = []
-
     for job in jobs:
-        # Default starting state
+        # Default placeholder
         final_status = job.status
         result_display = {"label": "UPLINK", "value": "AWAITING_DATA", "download_url": None}
 
-        if job.status in ["COMPLETED", "PASS", "WARNING", "FAIL", "FAILED"] and job.results:
+        # Check if result object exists and has data
+        if job.results and job.results.output_data:
             data = job.results.output_data
             
-            # --- COLONY COUNTER LOGIC ---
             if job.service_type == "colony_counter":
+                # Match the keys in your provided JSON: "colony_count" and "output_s3_uri"
                 count = data.get('colony_count', 0)
-                # Logic: If 0 colonies found, it's a FAIL for this diagnostic
                 final_status = "PASS" if count > 0 else "FAIL"
                 result_display.update({
                     "label": "COLONY COUNT",
@@ -277,33 +284,32 @@ async def get_user_jobs(current_user: UserModel = Depends(get_current_user), db:
                     "download_url": get_presigned_url(data.get('output_s3_uri'))
                 })
 
-            # --- PEPTIDE QC LOGIC ---
             elif job.service_type == "peptide_qc":
                 found = data.get('found_in_sample', False)
-                # Logic: If peptide not found, mark as FAIL
+                abundance = data.get('relative_abundance_pct', 0)
                 final_status = "PASS" if found else "FAIL"
                 result_display.update({
                     "label": f"MS {'DETECTED' if found else 'NOT DETECTED'}",
-                    "value": f"{data.get('relative_abundance_pct', 0):.3f}% ABUNDANCE"
+                    "value": f"{abundance:.3f}% ABUNDANCE"
                 })
 
-            # --- CRISPR GENOMICS LOGIC ---
             elif job.service_type == "crispr_genomics":
-                # Standardize FAILED (infrastructure) to FAIL (result)
-                if job.status == "FAILED": final_status = "FAIL"
+                # Keep specific CRISPR messaging
                 result_display.update({
                     "label": "SPECIFICITY",
                     "value": data.get("specificity_summary", "N/A")
                 })
 
-        # Final Infrastructure Cleanup
-        if final_status == "FAILED": final_status = "FAIL"
+        # Cleanup Infrastructure labels for the UI
+        if final_status == "FAILED" or final_status == "COMPLETED":
+            final_status = "FAIL" if final_status == "FAILED" else "PASS"
 
         response_data.append({
             "id": job.display_id or f"ID-{job.id}",
             "method": job.service_type.replace("_", " ").title(),
-            "status": final_status, # The simplified status
+            "status": final_status,
             "result": result_display,
             "submitted_at": job.submitted_at.isoformat()
         })
+
     return response_data

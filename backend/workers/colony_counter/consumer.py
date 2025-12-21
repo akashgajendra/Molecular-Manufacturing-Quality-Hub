@@ -16,7 +16,7 @@ KAFKA_TOPIC = "topic-colony-jobs"
 CONSUMER_GROUP = "colony-counter-workers"
 
 # MinIO Config
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio_storage:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "quality-hub-dev")
@@ -44,6 +44,7 @@ def init_minio_client():
     # ... (same as before) ...
     try:
         client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
+        logger.info("MinIO client initialized successfully.")
         return client
     except Exception as e:
         logger.error(f"Failed to initialize MinIO client: {e}")

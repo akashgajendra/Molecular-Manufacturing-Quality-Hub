@@ -12,48 +12,44 @@ from dotenv import load_dotenv
 load_dotenv() 
 
 # --- MinIO (S3) Configuration ---
-# Uses the internal Docker service name ('minio') and port ('9000') for connection
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000") 
+# Uses the internal Docker service name ('minio_storage') and port ('9000') for connection
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio_storage:9000") 
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET_NAME", "quality-hub-dev")
+RAW_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio_storage:9000").strip().rstrip('/')
 
 # --- Kafka Configuration ---
 # Uses the internal Docker service name ('kafka') and port ('9092')
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
-# --- Dependency Functions ---
+# 1. Get the raw value and strip all whitespace/slashes immediately
 
 def get_minio_client() -> Minio:
-    """FastAPI Dependency for getting a MinIO client instance."""
     try:
-        # Note: secure=False is used because MinIO is running unencrypted in Docker
-        client = Minio(
-            MINIO_ENDPOINT,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False
-        )
-        # Ensure the bucket exists on startup (MinIO doesn't auto-create buckets)
-        if not client.bucket_exists(MINIO_BUCKET):
-            client.make_bucket(MINIO_BUCKET)
-            print(f"MinIO: Created bucket {MINIO_BUCKET}")
+        # CLEANUP: Minio library needs ONLY "host:port", no http://
+        # We strip the protocol specifically after stripping whitespace
+        clean_url = RAW_ENDPOINT.replace("http://", "").replace("https://", "")
         
-        # We attach the bucket name to the client object for easy access later
-        client._bucket_name = MINIO_BUCKET
-        return client
-    except S3Error as e:
-        print(f"MinIO Error during connection: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not connect to MinIO storage."
+        print(f"DEBUG: Connecting to MinIO at: {clean_url}")
+        
+        client = Minio(
+            clean_url,
+            access_key=os.getenv("MINIO_ROOT_USER"),
+            secret_key=os.getenv("MINIO_ROOT_PASSWORD"),
+            secure=False # Use False because Docker internal traffic is unencrypted
         )
+        
+        # Ensure bucket exists
+        bucket = os.getenv("MINIO_BUCKET_NAME", "quality-hub-dev")
+        if not client.bucket_exists(bucket):
+            client.make_bucket(bucket)
+        
+        client._bucket_name = bucket
+        return client
     except Exception as e:
         print(f"General MinIO error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="MinIO configuration failed."
-        )
+        raise HTTPException(status_code=500, detail="MinIO configuration failed.")
 
 
 def get_kafka_producer() -> Producer:
