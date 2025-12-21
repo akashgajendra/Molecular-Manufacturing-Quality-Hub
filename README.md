@@ -8,6 +8,9 @@ Built to handle the high-concurrency demands of modern biotechnology, the platfo
 
 Below are snapshots illustrating the end-to-end user workflow within the HelixGuard platform.
 
+<img width="600" height="600" alt="image" src="https://github.com/user-attachments/assets/3d92745d-3c9f-4c82-a738-37eda709499a" />
+
+
 ### New User Registration
 <img width="600" height="600" alt="New user registration" src="https://github.com/user-attachments/assets/f1cd055b-f79f-472a-b973-3740983346f8" />
 
